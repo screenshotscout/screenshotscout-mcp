@@ -1,0 +1,8 @@
+ai-tools
+mcp
+mcp-server
+model-context-protocol
+screenshot-api
+screenshotscout
+webpage-screenshot
+website-screenshot

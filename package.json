@@ -1,0 +1,103 @@
+{
+  "name": "@screenshotscout/mcp",
+  "version": "0.1.0",
+  "description": "Capture webpages as images or PDFs with Screenshot Scout through MCP.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "screenshotscout-mcp": "./dist/stdio.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/core/*.d.ts",
+    "dist/core/*.js",
+    "dist/http.d.ts",
+    "dist/http.js",
+    "dist/index.d.ts",
+    "dist/index.js",
+    "dist/server.d.ts",
+    "dist/server.js",
+    "dist/stdio.js",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "llms-install.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "clean": "node -e \"const fs = require('node:fs'); fs.rmSync('dist', { force: true, recursive: true });\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "mcpb:clean": "node scripts/clean-mcpb.mjs",
+    "mcpb:pack": "npm run mcpb:prepare && node scripts/pack-mcpb.mjs",
+    "mcpb:prepare": "npm run build && node scripts/prepare-mcpb.mjs",
+    "mcpb:smoke": "node scripts/smoke-mcpb-runtime.mjs",
+    "mcpb:validate": "npm run mcpb:prepare && mcpb validate mcpb/manifest.json",
+    "metadata:check": "node scripts/verify-metadata.mjs",
+    "prepack": "npm run build",
+    "registry:validate": "node scripts/validate-server-json.mjs",
+    "pretest": "npm run build",
+    "test": "tsx --test test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "author": "Oleksii Velykyi",
+  "license": "MIT",
+  "mcpName": "com.screenshotscout/mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/screenshotscout/screenshotscout-mcp.git"
+  },
+  "homepage": "https://screenshotscout.com/mcp",
+  "bugs": {
+    "url": "https://github.com/screenshotscout/screenshotscout-mcp/issues"
+  },
+  "keywords": [
+    "ai-tools",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "screenshot-api",
+    "screenshotscout",
+    "webpage-screenshot",
+    "website-screenshot"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@screenshotscout/sdk": "0.1.2",
+    "zod": "4.4.3"
+  },
+  "overrides": {
+    "@hono/node-server": "2.0.12",
+    "tmp": "0.2.7"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
+    "@cloudflare/workers-types": "5.20260727.1",
+    "@eslint/js": "10.0.1",
+    "@sentry/cloudflare": "10.68.0",
+    "@types/node": "22.20.1",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "eslint": "10.7.0",
+    "prettier": "3.9.6",
+    "tsx": "4.23.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0",
+    "wrangler": "4.114.0"
+  }
+}

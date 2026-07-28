@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+mcpb/server
+*.mcpb
+*.tgz
+assets/icon.svg

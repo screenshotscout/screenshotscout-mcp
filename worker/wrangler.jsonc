@@ -1,0 +1,34 @@
+{
+  "name": "mcpserver-dev",
+  "main": "index.ts",
+  "compatibility_date": "2026-07-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "upload_source_maps": false,
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "invocation_logs": false,
+    },
+  },
+  "vars": {
+    "SENTRY_ENVIRONMENT": "development",
+    "SENTRY_REQUEST_LOGGING_ENABLED": "true",
+  },
+  "env": {
+    "production": {
+      "name": "mcpserver",
+      "routes": [
+        {
+          "pattern": "mcp.screenshotscout.com",
+          "custom_domain": true,
+        },
+      ],
+      "vars": {
+        "SENTRY_ENVIRONMENT": "production",
+        "SENTRY_REQUEST_LOGGING_ENABLED": "true",
+      },
+    },
+  },
+}

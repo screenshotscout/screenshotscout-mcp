@@ -1,0 +1,56 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.screenshotscout/mcp",
+  "title": "Screenshot Scout",
+  "description": "Capture webpages as images or PDFs with the Screenshot Scout API.",
+  "version": "0.1.0",
+  "websiteUrl": "https://screenshotscout.com/mcp",
+  "repository": {
+    "url": "https://github.com/screenshotscout/screenshotscout-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@screenshotscout/mcp",
+      "version": "0.1.0",
+      "environmentVariables": [
+        {
+          "name": "SCREENSHOTSCOUT_ACCESS_KEY",
+          "description": "Screenshot Scout access key.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "SCREENSHOTSCOUT_SECRET_KEY",
+          "description": "Optional secret key for Screenshot Scout API keys that require signed requests.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.screenshotscout.com/mcp/api-key",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Screenshot Scout access key sent as a Bearer token.",
+          "value": "Bearer {access_key}",
+          "variables": {
+            "access_key": {
+              "description": "Screenshot Scout access key. Keys that require request signatures are not supported by this endpoint.",
+              "isRequired": true,
+              "isSecret": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
