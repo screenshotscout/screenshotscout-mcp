@@ -2,9 +2,9 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.screenshotscout/mcp",
   "title": "Screenshot Scout",
-  "description": "Capture webpages as images or PDFs with the Screenshot Scout API.",
+  "description": "Capture screenshots of webpages as images or PDFs with Screenshot Scout.",
   "version": "0.1.0",
-  "websiteUrl": "https://screenshotscout.com/mcp",
+  "websiteUrl": "https://screenshotscout.com/",
   "repository": {
     "url": "https://github.com/screenshotscout/screenshotscout-mcp",
     "source": "github"
