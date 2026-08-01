@@ -95,6 +95,31 @@ cannot attach a static Bearer header cannot use this endpoint.
 API keys that require request signatures must instead use local stdio or MCPB,
 or use a dedicated unsigned access key for the hosted endpoint.
 
+## Local stdio with Docker
+
+Build the production image from a source checkout:
+
+```sh
+docker build --tag screenshotscout-mcp:local .
+```
+
+Pass credentials from the local environment and keep stdin attached for MCP
+stdio traffic:
+
+```sh
+docker run --rm -i --init --cap-drop=ALL --security-opt=no-new-privileges --read-only \
+  -e SCREENSHOTSCOUT_ACCESS_KEY \
+  -e SCREENSHOTSCOUT_SECRET_KEY \
+  screenshotscout-mcp:local
+```
+
+`SCREENSHOTSCOUT_SECRET_KEY` remains optional. The image runs as an unprivileged
+user and contains only the compiled stdio server and its production dependencies.
+It declares no port or container health check: an MCP client owns the stdio
+process and verifies readiness by completing MCP initialization. The image and
+its Docker MCP Catalog metadata in `docker-mcp-catalog.yaml` are local
+preparation; no public image is implied by these commands.
+
 ## Tool: `capture_screenshot`
 
 `capture_screenshot` sends one capture request for the supplied URL and options.
