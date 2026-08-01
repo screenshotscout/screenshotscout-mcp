@@ -45,7 +45,12 @@ assertEqual(
 );
 assertEqual(packageJson.mcpName, server.name, "Registry server name");
 assertEqual(packageJson.version, manifest.version, "MCPB version");
-assertEqual(packageJson.version, server.version, "Registry version");
+// Registry metadata versions are immutable and may advance independently while
+// continuing to reference an already published package version.
+assert(
+  typeof server.version === "string" && server.version.length > 0,
+  "Registry version must be present.",
+);
 assertEqual(
   packageJson.version,
   server.packages?.[0]?.version,
