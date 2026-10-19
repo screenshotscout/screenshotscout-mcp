@@ -29,19 +29,6 @@ const DEFAULT_VIEWPORT_WIDTH = 1_280;
 const DEFAULT_VIEWPORT_HEIGHT = 720;
 const DEFAULT_JPEG_QUALITY = 60;
 
-const lossyImageFormatSet = new Set<string>(["jpg", "jpeg", "webp"]);
-const pdfFieldNames = [
-  "pdfPaperFormat",
-  "pdfLandscape",
-  "pdfPrintBackground",
-  "pdfMargin",
-  "pdfMarginTop",
-  "pdfMarginRight",
-  "pdfMarginBottom",
-  "pdfMarginLeft",
-  "pdfScale",
-] as const;
-
 const nonBlankStringSchema = z
   .string()
   .refine((value) => value.trim().length > 0, "Must not be blank.");
@@ -115,7 +102,9 @@ export const captureScreenshotInputSchema = z
     fullPage: z
       .boolean()
       .optional()
-      .describe("Capture the full scrollable page when true."),
+      .describe(
+        "Capture the full scrollable page when true. PDFs always contain the whole page.",
+      ),
     blockCookieBanners: z
       .boolean()
       .optional()
@@ -130,7 +119,7 @@ export const captureScreenshotInputSchema = z
       .describe("Attempt to block common chat widgets."),
     selector: nonBlankStringSchema
       .optional()
-      .describe("CSS selector for an element-only capture."),
+      .describe("CSS selector for an element-only capture. Ignored for PDF."),
     hideSelectors: selectorListSchema
       .optional()
       .describe("CSS selectors for elements to hide before capture."),
@@ -186,7 +175,7 @@ export const captureScreenshotInputSchema = z
       .max(8_192)
       .optional()
       .describe(
-        "Resize the captured content to this width in pixels before creating the image or PDF.",
+        "Resize the captured image to this width in pixels. Ignored for PDF.",
       ),
     imageHeight: z
       .number()
@@ -195,7 +184,7 @@ export const captureScreenshotInputSchema = z
       .max(8_192)
       .optional()
       .describe(
-        "Resize the captured content to this height in pixels before creating the image or PDF.",
+        "Resize the captured image to this height in pixels. Ignored for PDF.",
       ),
     imageQuality: z
       .number()
@@ -207,9 +196,9 @@ export const captureScreenshotInputSchema = z
         "JPEG or WebP output quality from 0 to 100. JPEG uses quality 60 when omitted.",
       ),
     pdfPaperFormat: z
-      .enum(["letter", "legal", "tabloid", "a4", "a3", "content"])
+      .enum(["letter", "legal", "tabloid", "a3", "a4", "a5", "a6"])
       .optional()
-      .describe("PDF paper size; requires format pdf."),
+      .describe("PDF paper size."),
     pdfLandscape: z
       .boolean()
       .optional()
@@ -227,36 +216,16 @@ export const captureScreenshotInputSchema = z
     pdfMarginLeft: cssLengthSchema.optional().describe("PDF left margin."),
     pdfScale: z
       .number()
-      .positive()
-      .max(3)
+      .min(0.1)
+      .max(2)
       .optional()
-      .describe("PDF rendering scale greater than 0 and at most 3."),
+      .describe("PDF scale from 0.1 to 2."),
+    pdfPageRanges: nonBlankStringSchema
+      .optional()
+      .describe("PDF page ranges to include, such as 1-3,5."),
   })
   .strict()
   .superRefine((input, context) => {
-    if (input.format !== "pdf") {
-      for (const field of pdfFieldNames) {
-        if (input[field] !== undefined) {
-          context.addIssue({
-            code: "custom",
-            path: [field],
-            message: `${field} requires format "pdf".`,
-          });
-        }
-      }
-    }
-
-    if (
-      input.imageQuality !== undefined &&
-      !lossyImageFormatSet.has(input.format)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["imageQuality"],
-        message: 'imageQuality requires format "jpg", "jpeg", or "webp".',
-      });
-    }
-
     if (
       input.imageWidth !== undefined &&
       input.imageHeight !== undefined &&
@@ -378,6 +347,9 @@ export function mapCaptureInputToSdk(
       ? {}
       : { pdfMarginLeft: input.pdfMarginLeft }),
     ...(input.pdfScale === undefined ? {} : { pdfScale: input.pdfScale }),
+    ...(input.pdfPageRanges === undefined
+      ? {}
+      : { pdfPageRanges: input.pdfPageRanges }),
   };
 
   return Object.freeze({

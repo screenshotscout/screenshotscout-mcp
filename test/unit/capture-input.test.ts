@@ -147,6 +147,7 @@ void test("all approved PDF inputs map to SDK-aligned options", () => {
     pdfMarginBottom: "1cm",
     pdfMarginLeft: "0",
     pdfScale: 1.5,
+    pdfPageRanges: "1-3,5",
   });
 
   const mapped = mapCaptureInputToSdk(parsed);
@@ -167,43 +168,35 @@ void test("all approved PDF inputs map to SDK-aligned options", () => {
     pdfMarginBottom: "1cm",
     pdfMarginLeft: "0",
     pdfScale: 1.5,
+    pdfPageRanges: "1-3,5",
   });
 });
 
-void test("the schema rejects incompatible format-specific combinations", () => {
-  const invalidInputs = [
+void test("format-specific inputs pass through for other formats", () => {
+  const passThroughInputs = [
     {
       input: { url: targetUrl, format: "pdf", imageQuality: 80 },
       field: "imageQuality",
-      message: 'requires format "jpg", "jpeg", or "webp"',
+      value: 80,
     },
     {
       input: { url: targetUrl, format: "png", pdfLandscape: true },
       field: "pdfLandscape",
-      message: 'requires format "pdf"',
+      value: true,
     },
     {
       input: { url: targetUrl, format: "gif", imageQuality: 80 },
       field: "imageQuality",
-      message: 'requires format "jpg", "jpeg", or "webp"',
+      value: 80,
     },
   ] as const;
 
-  for (const invalid of invalidInputs) {
-    assert.throws(
-      () => parseCaptureScreenshotInput(invalid.input),
-      (error: unknown) => {
-        assert.ok(error instanceof ZodError);
-        assert.ok(
-          error.issues.some(
-            (issue) =>
-              issue.path[0] === invalid.field &&
-              issue.message.includes(invalid.message),
-          ),
-        );
-        return true;
-      },
+  for (const passThrough of passThroughInputs) {
+    const mapped = mapCaptureInputToSdk(
+      parseCaptureScreenshotInput(passThrough.input),
     );
+
+    assert.equal(mapped.captureOptions[passThrough.field], passThrough.value);
   }
 });
 

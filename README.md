@@ -132,21 +132,23 @@ Only `url` is required. Captures use a 1280×720 viewport by default. When no
 format is specified, the tool returns JPEG at quality 60. `resultMode` defaults
 to `"auto"`.
 
-| Group                 | Inputs                                                                                                                                                                                       |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Target and output     | `url`; `format` (`png`, `jpg`, `jpeg`, `webp`, `gif`, `tiff`, `pdf`); `resultMode` (`auto`, `url_only`)                                                                                      |
-| Location and viewport | `country` (two-letter country code), `device`, `deviceViewportWidth`, `deviceViewportHeight`, `colorScheme` (`auto`, `dark`, `light`), `fullPage`                                            |
-| Page preparation      | `blockCookieBanners`, `blockAds`, `blockChatWidgets`, `selector`, `hideSelectors`, `clickSelectors`                                                                                          |
-| Timing                | `waitUntil` (`load`, `domcontentloaded`, `networkidle0`, `networkidle2`), `delay` (0–30 seconds), `navigationTimeout` (5–90 seconds), `timeout` (1–240 seconds)                              |
-| Cache                 | `cache`, `cacheTtl` (14,400–2,592,000 seconds)                                                                                                                                               |
-| Output resizing       | `imageWidth`, `imageHeight` (1–8,192; available for images and PDFs)                                                                                                                         |
-| Image only            | `imageQuality` (0–100, JPEG/WebP only)                                                                                                                                                       |
-| PDF only              | `pdfPaperFormat` (`letter`, `legal`, `tabloid`, `a4`, `a3`, `content`), `pdfLandscape`, `pdfPrintBackground`, `pdfMargin`, per-side margin fields, `pdfScale` (greater than 0 and at most 3) |
+| Group                 | Inputs                                                                                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Target and output     | `url`; `format` (`png`, `jpg`, `jpeg`, `webp`, `gif`, `tiff`, `pdf`); `resultMode` (`auto`, `url_only`)                                                                                                   |
+| Location and viewport | `country` (two-letter country code), `device`, `deviceViewportWidth`, `deviceViewportHeight`, `colorScheme` (`auto`, `dark`, `light`), `fullPage`                                                         |
+| Page preparation      | `blockCookieBanners`, `blockAds`, `blockChatWidgets`, `selector`, `hideSelectors`, `clickSelectors`                                                                                                       |
+| Timing                | `waitUntil` (`load`, `domcontentloaded`, `networkidle0`, `networkidle2`), `delay` (0–30 seconds), `navigationTimeout` (5–90 seconds), `timeout` (1–240 seconds)                                           |
+| Cache                 | `cache`, `cacheTtl` (14,400–2,592,000 seconds)                                                                                                                                                            |
+| Output resizing       | `imageWidth`, `imageHeight` (1–8,192; images only)                                                                                                                                                        |
+| Image only            | `imageQuality` (0–100, JPEG/WebP only)                                                                                                                                                                    |
+| PDF only              | `pdfPaperFormat` (`letter`, `legal`, `tabloid`, `a3`, `a4`, `a5`, `a6`), `pdfLandscape`, `pdfPrintBackground`, `pdfMargin`, per-side margin fields, `pdfScale` (0.1–2), `pdfPageRanges` (such as `1-3,5`) |
 
 When both output dimensions are provided, their product cannot exceed 64,000,000
 pixels. PDF margins accept non-negative values in `px`, `in`, `mm`, or `cm`.
-`imageQuality` requires JPEG or WebP output, and PDF-only options require
-`format: "pdf"`.
+Inputs for another format are ignored: `imageQuality` applies only to JPEG and
+WebP, and PDF inputs only to `format: "pdf"`. A PDF always contains the whole
+page, so `fullPage`, `selector`, `imageWidth`, and `imageHeight` are ignored for
+PDF.
 
 ### Results
 

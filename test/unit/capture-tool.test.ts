@@ -67,6 +67,7 @@ const curatedInputNames = [
   "pdfMarginLeft",
   "pdfMarginRight",
   "pdfMarginTop",
+  "pdfPageRanges",
   "pdfPaperFormat",
   "pdfPrintBackground",
   "pdfScale",
@@ -662,13 +663,12 @@ void test("registered runtime validation rejects incompatible input before quota
       arguments: {
         url: "https://example.com",
         format: "pdf",
-        imageQuality: 80,
+        pdfScale: 3,
       },
     });
 
     assert.equal(result.isError, true);
-    assert.match(toolResultText(result), /imageQuality/);
-    assert.match(toolResultText(result), /jpg/);
+    assert.match(toolResultText(result), /pdfScale/);
     assert.equal(recording.calls.length, 0);
   } finally {
     await harness.close();
