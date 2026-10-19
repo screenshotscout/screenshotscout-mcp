@@ -14,7 +14,7 @@ about:
   icon: https://raw.githubusercontent.com/screenshotscout/screenshotscout-mcp/main/assets/icon-400.png
 source:
   project: https://github.com/screenshotscout/screenshotscout-mcp
-  commit: 13f14c8750ebef42f08b7928bbeeda417c9cabd4
+  commit: 1433c619c15f575a82e16eda6b4fe620e40f2031
 run:
   allowHosts:
     - api.screenshotscout.com:443
