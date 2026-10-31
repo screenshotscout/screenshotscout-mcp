@@ -6,7 +6,10 @@ import type {
   CallToolResult,
   ResourceLink,
 } from "@modelcontextprotocol/sdk/types.js";
-import { CaptureHttpMethod } from "@screenshotscout/sdk";
+import {
+  CaptureHttpMethod,
+  type BinaryCaptureOptions,
+} from "@screenshotscout/sdk";
 
 import {
   captureScreenshotInputSchema,
@@ -14,7 +17,10 @@ import {
   type CaptureScreenshotInput,
 } from "./capture-input.js";
 import type { ScreenshotScoutCaptureClient } from "./client.js";
-import { formatScreenshotScoutError } from "./errors.js";
+import {
+  formatScreenshotScoutError,
+  SignedRequestTooLongError,
+} from "./errors.js";
 import {
   evaluateInlineImage,
   normalizeMimeType,
@@ -43,7 +49,21 @@ export type CaptureScreenshotToolDependencies = {
   readonly maxSerializedResultBytes?: number;
   readonly sensitiveValues?: readonly (string | null | undefined)[];
   readonly onUnexpectedError?: (diagnostic: RedactedDiagnostic) => void;
+  /**
+   * Set when the client has a secret key. Only GET requests can be signed, so
+   * captures are then sent as signed GET requests.
+   */
+  readonly signedRequests?: {
+    buildCaptureUrl(
+      targetUrl: string,
+      captureOptions?: BinaryCaptureOptions | null,
+    ): string;
+  };
 };
+
+// Cloudflare refuses URLs over 16 KB. The built capture URL also carries the
+// access key, which a GET capture sends in a header, so it's an upper bound.
+const MAX_SIGNED_CAPTURE_URL_LENGTH = 16_000;
 
 export type CaptureScreenshotInvocationContext = {
   readonly signal?: AbortSignal;
@@ -62,11 +82,24 @@ export async function invokeCaptureScreenshot(
 
   try {
     const mappedRequest = mapCaptureInputToSdk(input);
+    const signedRequests = dependencies.signedRequests;
+    if (
+      signedRequests !== undefined &&
+      signedRequests.buildCaptureUrl(
+        mappedRequest.targetUrl,
+        mappedRequest.captureOptions,
+      ).length > MAX_SIGNED_CAPTURE_URL_LENGTH
+    ) {
+      throw new SignedRequestTooLongError();
+    }
     const response = await dependencies.client.capture(
       mappedRequest.targetUrl,
       mappedRequest.captureOptions,
       {
-        method: CaptureHttpMethod.POST,
+        method:
+          signedRequests === undefined
+            ? CaptureHttpMethod.POST
+            : CaptureHttpMethod.GET,
         ...(context.signal === undefined ? {} : { signal: context.signal }),
       },
     );

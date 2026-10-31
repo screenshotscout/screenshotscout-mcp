@@ -3,8 +3,8 @@
 import process from "node:process";
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { ScreenshotScoutClient } from "@screenshotscout/sdk";
 
-import { createScreenshotScoutClient } from "./core/client.js";
 import {
   redactText,
   toRedactedDiagnostic,
@@ -25,9 +25,11 @@ class StdioStartupConfigurationError extends Error {
 async function main(): Promise<void> {
   const credentials = readCredentials(process.env);
   const sensitiveValues = [credentials.accessKey, credentials.secretKey];
-  const client = createScreenshotScoutClient(credentials);
+  const client = new ScreenshotScoutClient(credentials);
   const server = createScreenshotScoutMcpServer({
     client,
+    // With a secret key, captures go out as signed GET requests (only GET requests can be signed)
+    ...(credentials.secretKey === undefined ? {} : { signedRequests: client }),
     clientSupportsInlineImage: () => true,
     sensitiveValues,
     onUnexpectedError: (diagnostic) => {

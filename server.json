@@ -3,7 +3,7 @@
   "name": "com.screenshotscout/mcp",
   "title": "Screenshot Scout",
   "description": "Capture screenshots of webpages as images or PDFs with Screenshot Scout.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "websiteUrl": "https://screenshotscout.com/mcp",
   "repository": {
     "url": "https://github.com/screenshotscout/screenshotscout-mcp",
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "@screenshotscout/mcp",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "environmentVariables": [
         {
           "name": "SCREENSHOTSCOUT_ACCESS_KEY",

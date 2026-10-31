@@ -14,6 +14,17 @@ import {
 } from "./redaction.js";
 import { UnsafeCaptureResultError } from "./result.js";
 
+/**
+ * Thrown before sending a signed capture whose GET URL would be longer than
+ * Cloudflare accepts. Only GET requests can be signed.
+ */
+export class SignedRequestTooLongError extends Error {
+  constructor() {
+    super("The signed capture URL would be longer than 16 KB.");
+    this.name = "SignedRequestTooLongError";
+  }
+}
+
 export type SafeOptionError = {
   readonly option: string;
   readonly message: string;
@@ -24,6 +35,7 @@ export type SafeScreenshotScoutError = {
     | "api"
     | "cancelled"
     | "configuration"
+    | "request_too_long"
     | "response"
     | "serialization"
     | "transport"
@@ -87,6 +99,15 @@ function mapScreenshotScoutErrorInternal(
       ...(code === undefined ? {} : { code }),
       ...(optionErrors.length === 0 ? {} : { optionErrors }),
       ...(remediation === undefined ? {} : { remediation }),
+    };
+  }
+
+  if (error instanceof SignedRequestTooLongError) {
+    return {
+      category: "request_too_long",
+      message: "This capture is too long to send as a signed request.",
+      remediation:
+        "Shorten the URL or the selectors, or use an API key that doesn't require signed requests, without a secret key.",
     };
   }
 

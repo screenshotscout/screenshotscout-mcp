@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { createHmac } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import process from "node:process";
-import { URLSearchParams } from "node:url";
+import { URL } from "node:url";
 
 const captureEndpoint = "https://api.screenshotscout.com/v1/capture";
 const stdoutCapturePath =
@@ -21,8 +21,7 @@ if (stdoutCapturePath !== undefined) {
 }
 
 globalThis.fetch = async (input, init) => {
-  const body = validateRequest(input, init);
-  const format = body.format;
+  const format = validateRequest(input, init);
 
   if (format === "pdf") {
     return new globalThis.Response(Buffer.from("%PDF-1.7\n", "ascii"), {
@@ -52,20 +51,59 @@ globalThis.fetch = async (input, init) => {
   });
 };
 
+/** Checks the request the way the API would and returns its capture format. */
 function validateRequest(input, init) {
-  if (String(input) !== captureEndpoint || init?.method !== "POST") {
-    throw new Error("The stdio test mock received an unexpected request.");
-  }
-
   const accessKey = process.env.SCREENSHOTSCOUT_ACCESS_KEY;
   const secretKey = process.env.SCREENSHOTSCOUT_SECRET_KEY;
   if (accessKey === undefined) {
     throw new Error("The stdio test mock could not verify authentication.");
   }
 
-  const headers = new globalThis.Headers(init.headers);
+  const headers = new globalThis.Headers(init?.headers);
   if (headers.get("authorization") !== `Bearer ${accessKey}`) {
     throw new Error("The stdio test mock rejected authentication.");
+  }
+
+  const signingExpectation =
+    process.env.SCREENSHOTSCOUT_MCP_TEST_SIGNING_EXPECTATION;
+  if (signingExpectation === "required") {
+    // Only GET requests can be signed.
+    return validateSignedGetRequest(input, init, accessKey, secretKey);
+  }
+  if (signingExpectation === "absent") {
+    return validateUnsignedPostRequest(input, init, headers);
+  }
+  throw new Error("The stdio test mock has no signing expectation.");
+}
+
+function validateSignedGetRequest(input, init, accessKey, secretKey) {
+  const url = new URL(String(input));
+  if (
+    `${url.origin}${url.pathname}` !== captureEndpoint ||
+    (init?.method ?? "GET") !== "GET" ||
+    (init?.body !== undefined && init?.body !== null)
+  ) {
+    throw new Error("The stdio test mock received an unexpected request.");
+  }
+
+  const query = url.searchParams;
+  if (query.get("response_type") !== "binary") {
+    throw new Error("The stdio test mock rejected the request query.");
+  }
+  if (
+    secretKey === undefined ||
+    query.get("signature") !==
+      createExpectedSignature(query, accessKey, secretKey)
+  ) {
+    throw new Error("The stdio test mock rejected request signing.");
+  }
+
+  return query.get("format");
+}
+
+function validateUnsignedPostRequest(input, init, headers) {
+  if (String(input) !== captureEndpoint || init?.method !== "POST") {
+    throw new Error("The stdio test mock received an unexpected request.");
   }
   if (headers.get("content-type") !== "application/json") {
     throw new Error("The stdio test mock rejected the request content type.");
@@ -83,47 +121,24 @@ function validateRequest(input, init) {
   ) {
     throw new Error("The stdio test mock rejected the request body.");
   }
-
-  const signingExpectation =
-    process.env.SCREENSHOTSCOUT_MCP_TEST_SIGNING_EXPECTATION;
-  if (signingExpectation === "required") {
-    if (
-      secretKey === undefined ||
-      body.signature !== createExpectedSignature(body, accessKey, secretKey)
-    ) {
-      throw new Error("The stdio test mock rejected request signing.");
-    }
-  } else if (
-    signingExpectation === "absent" &&
-    Object.hasOwn(body, "signature")
-  ) {
+  if (Object.hasOwn(body, "signature")) {
     throw new Error("The stdio test mock received unexpected request signing.");
-  } else if (
-    signingExpectation !== "required" &&
-    signingExpectation !== "absent"
-  ) {
-    throw new Error("The stdio test mock has no signing expectation.");
   }
 
-  return body;
+  return body.format;
 }
 
-function createExpectedSignature(body, accessKey, secretKey) {
+// The API's signed text: the decoded query parameters except signature, plus
+// the access key sent in the header, sorted by name (repeated names keep their
+// order) and written with RFC 3986 percent-encoding.
+function createExpectedSignature(query, accessKey, secretKey) {
   const entries = [];
   let index = 0;
 
-  for (const [name, value] of Object.entries(body)) {
+  for (const [name, value] of query) {
     if (name === "signature") continue;
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        entries.push({ name, value: String(item), index });
-        index += 1;
-      }
-    } else {
-      entries.push({ name, value: String(value), index });
-      index += 1;
-    }
+    entries.push({ name, value, index });
+    index += 1;
   }
   entries.push({ name: "access_key", value: accessKey, index });
   entries.sort((left, right) =>
@@ -134,12 +149,16 @@ function createExpectedSignature(body, accessKey, secretKey) {
         : 1,
   );
 
-  const canonical = new URLSearchParams();
-  for (const entry of entries) {
-    canonical.append(entry.name, entry.value);
-  }
+  const encode = (text) =>
+    encodeURIComponent(text).replace(
+      /[!'()*]/g,
+      (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+    );
+  const signedText = entries
+    .map((entry) => `${encode(entry.name)}=${encode(entry.value)}`)
+    .join("&");
   return createHmac("sha256", secretKey)
-    .update(canonical.toString(), "utf8")
+    .update(signedText, "utf8")
     .digest("hex");
 }
 

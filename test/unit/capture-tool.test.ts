@@ -395,6 +395,74 @@ void test("an eligible image invocation maps once, makes one POST call, and retu
   }
 });
 
+void test("with signed requests, a capture checks the signed URL length and makes one GET call", async () => {
+  const recording = createRecordingClient(() =>
+    createBinaryResponse({
+      contentType: "image/png",
+      bytes: Uint8Array.of(1),
+    }),
+  );
+  const builtUrls: { targetUrl: string; captureOptions: unknown }[] = [];
+  const harness = await createHarness({
+    client: recording.client,
+    signedRequests: {
+      buildCaptureUrl(targetUrl, captureOptions) {
+        builtUrls.push({ targetUrl, captureOptions });
+        return "https://api.screenshotscout.com/v1/capture?url=short";
+      },
+    },
+  });
+
+  try {
+    await harness.client.callTool({
+      name: CAPTURE_SCREENSHOT_TOOL_NAME,
+      arguments: { url: "https://example.com/signed", format: "png" },
+    });
+
+    assert.equal(recording.calls.length, 1);
+    const call = recording.calls[0];
+    assert.ok(call);
+    assert.equal(call.captureRequestOptions?.method, CaptureHttpMethod.GET);
+    assert.deepEqual(builtUrls, [
+      {
+        targetUrl: "https://example.com/signed",
+        captureOptions: call.captureOptions,
+      },
+    ]);
+  } finally {
+    await harness.close();
+  }
+});
+
+void test("with signed requests, a capture whose URL would pass 16 KB fails before any API call", async () => {
+  const recording = createRecordingClient(() =>
+    createBinaryResponse({ contentType: "image/png", bytes: Uint8Array.of(1) }),
+  );
+  const diagnostics: unknown[] = [];
+  const harness = await createHarness({
+    client: recording.client,
+    signedRequests: { buildCaptureUrl: () => "x".repeat(16_001) },
+    onUnexpectedError: (diagnostic) => diagnostics.push(diagnostic),
+  });
+
+  try {
+    const result = await harness.client.callTool({
+      name: CAPTURE_SCREENSHOT_TOOL_NAME,
+      arguments: { url: "https://example.com/long", format: "png" },
+    });
+
+    assert.equal(result.isError, true);
+    assert.equal(
+      toolResultText(result),
+      "Screenshot Scout capture failed.\nMessage: This capture is too long to send as a signed request.\nHow to resolve: Shorten the URL or the selectors, or use an API key that doesn't require signed requests, without a secret key.",
+    );
+    assert.equal(recording.calls.length, 0);
+    assert.deepEqual(diagnostics, []);
+  } finally {
+    await harness.close();
+  }
+});
+
 void test("a PDF invocation never embeds bytes and returns a temporary resource link", async () => {
   const screenshotUrl = "https://cdn.example/capture.pdf";
   const bytes = Uint8Array.of(37, 80, 68, 70);

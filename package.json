@@ -1,6 +1,6 @@
 {
   "name": "@screenshotscout/mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Capture webpages as images or PDFs with Screenshot Scout through MCP.",
   "type": "module",
   "main": "./dist/index.js",
