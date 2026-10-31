@@ -81,6 +81,8 @@ void test(
               url: targetUrl,
               format: "png",
               resultMode: "auto",
+              // Form encoding writes these differently, so the mock's signature check catches it.
+              hideSelectors: ["#card ~ *é()", "#😀 + a"],
             },
           }),
         );
