@@ -154,6 +154,68 @@ void test(
 );
 
 void test(
+  "hosted clients ignore Screenshot Scout keys in the server's own environment",
+  { timeout: 15_000 },
+  async () => {
+    const accessKey = createAccessKey("environment");
+    const upstreamCalls: UpstreamCaptureCall[] = [];
+    const previous = {
+      access: process.env.SCREENSHOTSCOUT_ACCESS_KEY,
+      secret: process.env.SCREENSHOTSCOUT_SECRET_KEY,
+    };
+    process.env.SCREENSHOTSCOUT_ACCESS_KEY = "server-environment-access-key";
+    process.env.SCREENSHOTSCOUT_SECRET_KEY = "server-environment-secret-key";
+    const loopback = await startLoopbackScreenshotScoutHttpServer({
+      clientDependencies: { fetch: createUpstreamFetch(upstreamCalls) },
+    });
+    const transport = new StreamableHTTPClientTransport(loopback.url, {
+      requestInit: {
+        headers: { Authorization: `Bearer ${accessKey}` },
+      },
+    });
+    const client = new Client({
+      name: "screenshotscout-http-environment-test",
+      version: "0.0.0",
+    });
+    let connected = false;
+
+    try {
+      await client.connect(transport as unknown as Transport);
+      connected = true;
+      const result = asCallToolResult(
+        await client.callTool({
+          name: CAPTURE_SCREENSHOT_TOOL_NAME,
+          arguments: {
+            url: "https://target.example.test/image",
+            format: "png",
+          },
+        }),
+      );
+
+      assert.equal(result.isError, undefined);
+      assert.equal(upstreamCalls.length, 1);
+      const call = upstreamCalls[0];
+      assert.ok(call);
+      assert.equal(call.accessKey, accessKey);
+      assert.equal(call.method, "POST");
+      assert.equal(Object.hasOwn(call.body, "signature"), false);
+    } finally {
+      if (connected) {
+        await client.close().catch(() => undefined);
+      }
+      await loopback.close();
+      for (const [name, value] of [
+        ["SCREENSHOTSCOUT_ACCESS_KEY", previous.access],
+        ["SCREENSHOTSCOUT_SECRET_KEY", previous.secret],
+      ] as const) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  },
+);
+
+void test(
   "missing, malformed, query, body, tool, and alternate-header credentials are rejected without reaching Screenshot Scout",
   { timeout: 15_000 },
   async () => {
@@ -679,7 +741,7 @@ void test("concurrent requests use independent stateless transports even when JS
     allowedHosts: [directHost],
     clientDependencies: {
       clientFactory: (options: ScreenshotScoutClientOptions) => {
-        configuredClients.push(options.accessKey);
+        configuredClients.push(options.accessKey ?? "");
         assert.equal(Object.hasOwn(options, "secretKey"), false);
 
         return {

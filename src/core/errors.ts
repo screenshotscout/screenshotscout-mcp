@@ -14,16 +14,9 @@ import {
 } from "./redaction.js";
 import { UnsafeCaptureResultError } from "./result.js";
 
-/**
- * Thrown before sending a signed capture whose GET URL would be longer than
- * Cloudflare accepts. Only GET requests can be signed.
- */
-export class SignedRequestTooLongError extends Error {
-  constructor() {
-    super("The signed capture URL would be longer than 16 KB.");
-    this.name = "SignedRequestTooLongError";
-  }
-}
+// The API's edge answers 414 when a capture URL is too long. Only signed captures use
+// GET, because only GET requests can be signed.
+const URI_TOO_LONG_STATUS = 414;
 
 export type SafeOptionError = {
   readonly option: string;
@@ -75,6 +68,18 @@ function mapScreenshotScoutErrorInternal(
 ): SafeScreenshotScoutError {
   const sensitiveValues = options.sensitiveValues ?? [];
 
+  if (
+    error instanceof ScreenshotScoutApiError &&
+    error.status === URI_TOO_LONG_STATUS
+  ) {
+    return {
+      category: "request_too_long",
+      message: "This capture is too long to send as a signed request.",
+      remediation:
+        "Shorten the URL or the selectors, or use an API key that doesn't require signed requests, without a secret key.",
+    };
+  }
+
   if (error instanceof ScreenshotScoutApiError) {
     const code =
       error.errorCode === undefined
@@ -99,15 +104,6 @@ function mapScreenshotScoutErrorInternal(
       ...(code === undefined ? {} : { code }),
       ...(optionErrors.length === 0 ? {} : { optionErrors }),
       ...(remediation === undefined ? {} : { remediation }),
-    };
-  }
-
-  if (error instanceof SignedRequestTooLongError) {
-    return {
-      category: "request_too_long",
-      message: "This capture is too long to send as a signed request.",
-      remediation:
-        "Shorten the URL or the selectors, or use an API key that doesn't require signed requests, without a secret key.",
     };
   }
 

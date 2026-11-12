@@ -7,7 +7,6 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
-  CaptureHttpMethod,
   ScreenshotScoutApiError,
   type BinaryCaptureOptions,
   type BinaryCaptureResponse,
@@ -357,7 +356,8 @@ void test("an eligible image invocation maps once, makes one POST call, and retu
       imageHeight: 800,
       imageQuality: 90,
     });
-    assert.equal(call.captureRequestOptions?.method, CaptureHttpMethod.POST);
+    // The SDK picks the method, so the tool doesn't pass one.
+    assert.equal(call.captureRequestOptions?.method, undefined);
     assert.ok(call.captureRequestOptions?.signal instanceof AbortSignal);
 
     assert.equal(result.isError, undefined);
@@ -395,53 +395,21 @@ void test("an eligible image invocation maps once, makes one POST call, and retu
   }
 });
 
-void test("with signed requests, a capture checks the signed URL length and makes one GET call", async () => {
-  const recording = createRecordingClient(() =>
-    createBinaryResponse({
-      contentType: "image/png",
-      bytes: Uint8Array.of(1),
-    }),
-  );
-  const builtUrls: { targetUrl: string; captureOptions: unknown }[] = [];
-  const harness = await createHarness({
-    client: recording.client,
-    signedRequests: {
-      buildCaptureUrl(targetUrl, captureOptions) {
-        builtUrls.push({ targetUrl, captureOptions });
-        return "https://api.screenshotscout.com/v1/capture?url=short";
+void test("a capture the API refuses as too long reports request_too_long", async () => {
+  const recording = createRecordingClient(() => {
+    throw new ScreenshotScoutApiError({
+      rawResponse: {
+        status: 414,
+        statusText: "URI Too Long",
+        headers: new Map<string, readonly string[]>(),
+        contentType: null,
+        body: new Uint8Array(),
       },
-    },
-  });
-
-  try {
-    await harness.client.callTool({
-      name: CAPTURE_SCREENSHOT_TOOL_NAME,
-      arguments: { url: "https://example.com/signed", format: "png" },
     });
-
-    assert.equal(recording.calls.length, 1);
-    const call = recording.calls[0];
-    assert.ok(call);
-    assert.equal(call.captureRequestOptions?.method, CaptureHttpMethod.GET);
-    assert.deepEqual(builtUrls, [
-      {
-        targetUrl: "https://example.com/signed",
-        captureOptions: call.captureOptions,
-      },
-    ]);
-  } finally {
-    await harness.close();
-  }
-});
-
-void test("with signed requests, a capture whose URL would pass 16 KB fails before any API call", async () => {
-  const recording = createRecordingClient(() =>
-    createBinaryResponse({ contentType: "image/png", bytes: Uint8Array.of(1) }),
-  );
+  });
   const diagnostics: unknown[] = [];
   const harness = await createHarness({
     client: recording.client,
-    signedRequests: { buildCaptureUrl: () => "x".repeat(16_001) },
     onUnexpectedError: (diagnostic) => diagnostics.push(diagnostic),
   });
 
@@ -456,7 +424,6 @@ void test("with signed requests, a capture whose URL would pass 16 KB fails befo
       toolResultText(result),
       "Screenshot Scout capture failed.\nMessage: This capture is too long to send as a signed request.\nHow to resolve: Shorten the URL or the selectors, or use an API key that doesn't require signed requests, without a secret key.",
     );
-    assert.equal(recording.calls.length, 0);
     assert.deepEqual(diagnostics, []);
   } finally {
     await harness.close();

@@ -3,7 +3,10 @@
 import process from "node:process";
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { ScreenshotScoutClient } from "@screenshotscout/sdk";
+import {
+  ScreenshotScoutClient,
+  ScreenshotScoutConfigurationError,
+} from "@screenshotscout/sdk";
 
 import {
   redactText,
@@ -15,21 +18,12 @@ import { createScreenshotScoutMcpServer } from "./server.js";
 const ACCESS_KEY_ENVIRONMENT_VARIABLE = "SCREENSHOTSCOUT_ACCESS_KEY";
 const SECRET_KEY_ENVIRONMENT_VARIABLE = "SCREENSHOTSCOUT_SECRET_KEY";
 
-class StdioStartupConfigurationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "StdioStartupConfigurationError";
-  }
-}
-
 async function main(): Promise<void> {
-  const credentials = readCredentials(process.env);
-  const sensitiveValues = [credentials.accessKey, credentials.secretKey];
-  const client = new ScreenshotScoutClient(credentials);
+  const sensitiveValues = readSensitiveValues();
+  // The SDK reads both keys from the environment, and with a secret key it signs and sends GET.
+  const client = new ScreenshotScoutClient();
   const server = createScreenshotScoutMcpServer({
     client,
-    // With a secret key, captures go out as signed GET requests (only GET requests can be signed)
-    ...(credentials.secretKey === undefined ? {} : { signedRequests: client }),
     clientSupportsInlineImage: () => true,
     sensitiveValues,
     onUnexpectedError: (diagnostic) => {
@@ -115,34 +109,12 @@ async function main(): Promise<void> {
   }
 }
 
-function readCredentials(environment: NodeJS.ProcessEnv): {
-  readonly accessKey: string;
-  readonly secretKey?: string;
-} {
-  const accessKey = environment[ACCESS_KEY_ENVIRONMENT_VARIABLE];
-  if (accessKey === undefined || accessKey.trim().length === 0) {
-    throw new StdioStartupConfigurationError(
-      `${ACCESS_KEY_ENVIRONMENT_VARIABLE} is required and must not be blank.`,
-    );
-  }
-
-  const configuredSecretKey = environment[SECRET_KEY_ENVIRONMENT_VARIABLE];
-  if (
-    configuredSecretKey !== undefined &&
-    configuredSecretKey !== "" &&
-    configuredSecretKey.trim().length === 0
-  ) {
-    throw new StdioStartupConfigurationError(
-      `${SECRET_KEY_ENVIRONMENT_VARIABLE} must not contain only whitespace.`,
-    );
-  }
-  const secretKey =
-    configuredSecretKey === "" ? undefined : configuredSecretKey;
-
-  return {
-    accessKey,
-    ...(secretKey === undefined ? {} : { secretKey }),
-  };
+/** The raw key values, so diagnostics can redact them. */
+function readSensitiveValues(): (string | undefined)[] {
+  return [
+    process.env[ACCESS_KEY_ENVIRONMENT_VARIABLE],
+    process.env[SECRET_KEY_ENVIRONMENT_VARIABLE],
+  ];
 }
 
 function writeRedactedDiagnostic(
@@ -188,13 +160,15 @@ function isBrokenPipeError(error: unknown): boolean {
 }
 
 void main().catch((error: unknown) => {
-  const sensitiveValues = [
-    process.env[ACCESS_KEY_ENVIRONMENT_VARIABLE],
-    process.env[SECRET_KEY_ENVIRONMENT_VARIABLE],
-  ];
+  const sensitiveValues = readSensitiveValues();
 
-  if (error instanceof StdioStartupConfigurationError) {
-    writeStderr(`[screenshotscout-mcp] Startup failed: ${error.message}\n`);
+  if (error instanceof ScreenshotScoutConfigurationError) {
+    const message = redactText(error.message, {
+      sensitiveValues,
+      redactUrls: true,
+      maxLength: 1_000,
+    });
+    writeStderr(`[screenshotscout-mcp] Startup failed: ${message}\n`);
   } else {
     writeRedactedDiagnostic(
       "Startup failed",
