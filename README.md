@@ -44,6 +44,10 @@ If the access key requires request signing, add the secret locally:
 "SCREENSHOTSCOUT_SECRET_KEY": "YOUR_SECRET_KEY"
 ```
 
+To send requests to another server, such as your own proxy, also set
+`SCREENSHOTSCOUT_BASE_URL` to its base URL. Captures then go to that URL plus
+`/v1/capture`.
+
 Keep personal configuration files out of source control. Credentials are process
 environment values, not tool arguments. See
 [client-specific copy-paste configurations](examples/README.md) for Claude
@@ -71,7 +75,7 @@ To install the Claude Desktop extension:
 4. Enter the required access key. Enter the secret key only for an API key that
    requires signed requests.
 
-Claude Desktop treats both fields as sensitive settings. The `v0.4.0` MCPB
+Claude Desktop treats both fields as sensitive settings. The `v0.5.0` MCPB
 supports Windows.
 
 ## Hosted Streamable HTTP

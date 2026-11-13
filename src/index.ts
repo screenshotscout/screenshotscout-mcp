@@ -16,6 +16,7 @@ export type {
   ScreenshotScoutCaptureClient,
   ScreenshotScoutClientDependencies,
   ScreenshotScoutClientFactory,
+  ScreenshotScoutClientSettings,
   ScreenshotScoutCredentials,
 } from "./core/client.js";
 export {

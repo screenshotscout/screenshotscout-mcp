@@ -172,6 +172,38 @@ void test(
 );
 
 void test(
+  "the stdio executable sends captures to SCREENSHOTSCOUT_BASE_URL",
+  { timeout: 15_000 },
+  async () => {
+    const accessKey = createAccessKey();
+
+    const session = await runStdioSession(
+      {
+        SCREENSHOTSCOUT_ACCESS_KEY: accessKey,
+        SCREENSHOTSCOUT_BASE_URL: "http://localhost:8787/",
+        SCREENSHOTSCOUT_MCP_TEST_SIGNING_EXPECTATION: "absent",
+      },
+      async (client) =>
+        asCallToolResult(
+          await client.callTool({
+            name: CAPTURE_SCREENSHOT_TOOL_NAME,
+            arguments: {
+              url: "https://target.example.test/base-url",
+              format: "png",
+              resultMode: "url_only",
+            },
+          }),
+        ),
+    );
+
+    assert.equal(session.result.isError, undefined);
+    assertProtocolOnly(session.stdout);
+    assert.equal(session.stderr, "");
+    assertNoSensitiveOutput(session.stdout, session.stderr, [accessKey]);
+  },
+);
+
+void test(
   "the stdio executable treats an empty optional secret key as absent",
   { timeout: 15_000 },
   async () => {

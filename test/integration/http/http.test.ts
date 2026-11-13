@@ -154,7 +154,7 @@ void test(
 );
 
 void test(
-  "hosted clients ignore Screenshot Scout keys in the server's own environment",
+  "hosted clients ignore Screenshot Scout keys and base URL in the server's own environment",
   { timeout: 15_000 },
   async () => {
     const accessKey = createAccessKey("environment");
@@ -162,9 +162,11 @@ void test(
     const previous = {
       access: process.env.SCREENSHOTSCOUT_ACCESS_KEY,
       secret: process.env.SCREENSHOTSCOUT_SECRET_KEY,
+      baseUrl: process.env.SCREENSHOTSCOUT_BASE_URL,
     };
     process.env.SCREENSHOTSCOUT_ACCESS_KEY = "server-environment-access-key";
     process.env.SCREENSHOTSCOUT_SECRET_KEY = "server-environment-secret-key";
+    process.env.SCREENSHOTSCOUT_BASE_URL = "http://server-environment.invalid";
     const loopback = await startLoopbackScreenshotScoutHttpServer({
       clientDependencies: { fetch: createUpstreamFetch(upstreamCalls) },
     });
@@ -207,10 +209,62 @@ void test(
       for (const [name, value] of [
         ["SCREENSHOTSCOUT_ACCESS_KEY", previous.access],
         ["SCREENSHOTSCOUT_SECRET_KEY", previous.secret],
+        ["SCREENSHOTSCOUT_BASE_URL", previous.baseUrl],
       ] as const) {
         if (value === undefined) delete process.env[name];
         else process.env[name] = value;
       }
+    }
+  },
+);
+
+void test(
+  "the handler sends captures to its configured base URL",
+  { timeout: 15_000 },
+  async () => {
+    const accessKey = createAccessKey("base_url");
+    const upstreamCalls: UpstreamCaptureCall[] = [];
+    const loopback = await startLoopbackScreenshotScoutHttpServer({
+      baseUrl: "http://localhost:8787/",
+      clientDependencies: {
+        fetch: createUpstreamFetch(
+          upstreamCalls,
+          "http://localhost:8787/v1/capture",
+        ),
+      },
+    });
+    const transport = new StreamableHTTPClientTransport(loopback.url, {
+      requestInit: {
+        headers: { Authorization: `Bearer ${accessKey}` },
+      },
+    });
+    const client = new Client({
+      name: "screenshotscout-http-base-url-test",
+      version: "0.0.0",
+    });
+    let connected = false;
+
+    try {
+      await client.connect(transport as unknown as Transport);
+      connected = true;
+      const result = asCallToolResult(
+        await client.callTool({
+          name: CAPTURE_SCREENSHOT_TOOL_NAME,
+          arguments: {
+            url: "https://target.example.test/image",
+            format: "png",
+          },
+        }),
+      );
+
+      assert.equal(result.isError, undefined);
+      assert.equal(upstreamCalls.length, 1);
+      assert.equal(upstreamCalls[0]?.accessKey, accessKey);
+    } finally {
+      if (connected) {
+        await client.close().catch(() => undefined);
+      }
+      await loopback.close();
     }
   },
 );
@@ -743,6 +797,7 @@ void test("concurrent requests use independent stateless transports even when JS
       clientFactory: (options: ScreenshotScoutClientOptions) => {
         configuredClients.push(options.accessKey ?? "");
         assert.equal(Object.hasOwn(options, "secretKey"), false);
+        assert.equal(options.baseUrl, "https://api.screenshotscout.com");
 
         return {
           async capture(targetUrl) {
@@ -813,6 +868,7 @@ void test("concurrent requests use independent stateless transports even when JS
 
 function createUpstreamFetch(
   calls: UpstreamCaptureCall[],
+  expectedUrl = "https://api.screenshotscout.com/v1/capture",
 ): ScreenshotScoutFetch {
   return (input, init) => {
     const inputUrl =
@@ -822,7 +878,7 @@ function createUpstreamFetch(
           ? input.href
           : input.url;
     const requestBody = init?.body;
-    assert.equal(inputUrl, "https://api.screenshotscout.com/v1/capture");
+    assert.equal(inputUrl, expectedUrl);
     assert.ok(typeof requestBody === "string");
     const headers = new Headers(init?.headers);
     const authorization = headers.get("authorization");

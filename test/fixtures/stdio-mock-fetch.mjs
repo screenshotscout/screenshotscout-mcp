@@ -4,7 +4,10 @@ import { appendFileSync } from "node:fs";
 import process from "node:process";
 import { URL } from "node:url";
 
-const captureEndpoint = "https://api.screenshotscout.com/v1/capture";
+// The SDK sends captures to SCREENSHOTSCOUT_BASE_URL plus the capture path when it's set.
+const baseUrl =
+  process.env.SCREENSHOTSCOUT_BASE_URL || "https://api.screenshotscout.com";
+const captureEndpoint = `${baseUrl.replace(/\/+$/u, "")}/v1/capture`;
 const stdoutCapturePath =
   process.env.SCREENSHOTSCOUT_MCP_TEST_STDOUT_CAPTURE_PATH;
 

@@ -1,7 +1,7 @@
 # Claude Desktop extension
 
 This directory contains the files used to build the Screenshot Scout MCPB for
-Claude Desktop. The `v0.4.0` bundle supports Windows.
+Claude Desktop. The `v0.5.0` bundle supports Windows.
 
 To install the extension, download `screenshotscout-mcp-<version>.mcpb` from the
 matching GitHub release. In Claude Desktop, open

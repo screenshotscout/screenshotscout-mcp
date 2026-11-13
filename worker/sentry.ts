@@ -14,6 +14,7 @@ import {
 } from "./sentry-sanitization.js";
 
 export type WorkerEnv = {
+  readonly SCREENSHOTSCOUT_BASE_URL?: string;
   readonly SENTRY_DSN?: string;
   readonly SENTRY_ENVIRONMENT?: string;
   readonly SENTRY_REQUEST_LOGGING_ENABLED?: string;

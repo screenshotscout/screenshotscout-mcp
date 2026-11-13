@@ -29,22 +29,35 @@ export type ScreenshotScoutClientDependencies = {
   readonly fetch?: ScreenshotScoutFetch;
 };
 
+export type ScreenshotScoutClientSettings = {
+  /** Base URL that captures are sent to. Defaults to the Screenshot Scout API. */
+  readonly baseUrl?: string;
+};
+
+const DEFAULT_BASE_URL = "https://api.screenshotscout.com";
+
 const defaultClientFactory: ScreenshotScoutClientFactory = (options) =>
   new ScreenshotScoutClient(options);
 
 /**
- * Constructs the official SDK client from credentials supplied by the caller.
- * Environment, transport, and tool layers remain outside this core.
+ * Constructs the official SDK client from credentials and settings supplied by
+ * the caller. Environment, transport, and tool layers remain outside this core.
  */
 export function createScreenshotScoutClient(
   credentials: ScreenshotScoutCredentials,
   dependencies: ScreenshotScoutClientDependencies = {},
+  settings: ScreenshotScoutClientSettings = {},
 ): ScreenshotScoutCaptureClient {
   const options: ScreenshotScoutClientOptions = {
     accessKey: credentials.accessKey,
     ...(credentials.secretKey === undefined
       ? {}
       : { secretKey: credentials.secretKey }),
+    // Always set, so the SDK never falls back to SCREENSHOTSCOUT_BASE_URL here.
+    baseUrl:
+      settings.baseUrl === undefined || settings.baseUrl === ""
+        ? DEFAULT_BASE_URL
+        : settings.baseUrl,
     ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
   };
 

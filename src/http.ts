@@ -42,6 +42,8 @@ export type ScreenshotScoutApiKeyHttpHandlerOptions = {
    */
   readonly allowedOrigins?: readonly string[];
   readonly maxRequestBodyBytes?: number;
+  /** Base URL that captures are sent to. Defaults to the Screenshot Scout API. */
+  readonly baseUrl?: string;
   readonly clientDependencies?: ScreenshotScoutClientDependencies;
   readonly clientSupportsInlineImage?: (
     mimeType: InlineImageMimeType,
@@ -196,6 +198,7 @@ export function createScreenshotScoutApiKeyHttpHandler(
       const baseClient = createScreenshotScoutClient(
         { accessKey },
         options.clientDependencies,
+        options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl },
       );
       const client = bindRequestCancellation(baseClient, request.signal);
       const server = createScreenshotScoutMcpServer({

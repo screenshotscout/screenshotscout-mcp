@@ -13,6 +13,7 @@
     },
   },
   "vars": {
+    "SCREENSHOTSCOUT_BASE_URL": "http://localhost:8787",
     "SENTRY_ENVIRONMENT": "development",
     "SENTRY_REQUEST_LOGGING_ENABLED": "true",
   },
@@ -26,6 +27,7 @@
         },
       ],
       "vars": {
+        "SCREENSHOTSCOUT_BASE_URL": "https://api.screenshotscout.com",
         "SENTRY_ENVIRONMENT": "production",
         "SENTRY_REQUEST_LOGGING_ENABLED": "true",
       },
