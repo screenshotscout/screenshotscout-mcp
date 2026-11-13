@@ -53,11 +53,12 @@ export function createScreenshotScoutClient(
     ...(credentials.secretKey === undefined
       ? {}
       : { secretKey: credentials.secretKey }),
-    // Always set, so the SDK never falls back to SCREENSHOTSCOUT_BASE_URL here.
+    // Always a non-empty string, so the SDK never falls back to SCREENSHOTSCOUT_BASE_URL here,
+    // even when a JavaScript caller passes null.
     baseUrl:
-      settings.baseUrl === undefined || settings.baseUrl === ""
-        ? DEFAULT_BASE_URL
-        : settings.baseUrl,
+      typeof settings.baseUrl === "string" && settings.baseUrl !== ""
+        ? settings.baseUrl
+        : DEFAULT_BASE_URL,
     ...(dependencies.fetch === undefined ? {} : { fetch: dependencies.fetch }),
   };
 
