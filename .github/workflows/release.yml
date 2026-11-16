@@ -1,0 +1,277 @@
+# Releases the MCP server when a vX.Y.Z tag is pushed:
+#   1. publishes @screenshotscout/mcp to npm,
+#   2. creates the GitHub release with the .mcpb bundle and its SHA-256,
+#   3. publishes server.json to the MCP Registry (com.screenshotscout/mcp).
+# The Docker catalog pin and the hosted server (worker/) are updated separately.
+#
+# Running it by hand (Actions > Release > Run workflow) is a dry run: it checks,
+# tests, packs and builds the bundle, and never publishes. Give it the new version
+# to also check the version files. Tick "check credentials" to log in to the MCP
+# Registry with the stored key and log out again, without publishing.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Dry run only: fail unless package.json, package-lock.json and server.json say this version (for example 1.2.3)"
+        required: false
+        type: string
+      check_credentials:
+        description: "Also check the MCP Registry key in the release environment (publishes nothing)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  MCP_PUBLISHER_VERSION: 1.8.9
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run metadata:check
+      # Downloads the server.json schema, so it needs the network; re-run on a network blip.
+      - run: npm run registry:validate
+
+      - name: Check that package.json, package-lock.json and server.json have the release version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then expected="${GITHUB_REF_NAME#v}"; else expected="$INPUT_VERSION"; fi
+          actual="$(node -p "require('./package.json').version")"
+          lock="$(node -p "const l = require('./package-lock.json'); l.version + ' ' + l.packages[''].version")"
+          registry="$(node -p "require('./server.json').version")"
+          echo "package.json version: $actual"
+          echo "server.json version: $registry"
+          if [[ "$lock" != "$actual $actual" ]]; then
+            echo "::error::package-lock.json ($lock) doesn't match package.json ($actual). Run npm install."
+            exit 1
+          fi
+          if [[ -n "$expected" && "$actual" != "$expected" ]]; then
+            echo "::error::package.json says $actual, but the release is $expected."
+            exit 1
+          fi
+          # metadata:check doesn't compare server.json's own version, so check it here.
+          if [[ -n "$expected" && "$registry" != "$expected" ]]; then
+            echo "::error::server.json says $registry, but the release is $expected."
+            exit 1
+          fi
+
+      # npm pack, not npm publish --dry-run: npm 11 fails a publish dry run when the version is already on npm.
+      - name: Pack without publishing
+        run: npm pack --dry-run
+
+      - name: Read the release notes from the tag
+        if: github.event_name == 'push'
+        run: |
+          # Fetch the tag object itself, so an annotated tag stays annotated.
+          git fetch --force --no-tags origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          if [[ "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" != "tag" ]]; then
+            echo "::error::${GITHUB_REF_NAME} isn't an annotated tag, so it has no release notes. Create it with git tag -a."
+            exit 1
+          fi
+          git for-each-ref "refs/tags/${GITHUB_REF_NAME}" --format='%(contents:body)' > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::Tag ${GITHUB_REF_NAME} has no release notes. Write them in the tag message, below the subject line."
+            exit 1
+          fi
+          cat release-notes.md
+
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  # The bundle supports Windows only (mcpb/manifest.json), so it's built and smoke-tested on Windows.
+  # The mcpb scripts must run through npm run (they use npm_execpath) and need the network.
+  bundle:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run mcpb:validate
+      - run: npm run mcpb:pack
+      - run: npm run mcpb:smoke
+
+      - name: Write the SHA-256 file
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $file = "screenshotscout-mcp-$version.mcpb"
+          $hash = (Get-FileHash $file -Algorithm SHA256).Hash
+          [IO.File]::WriteAllText((Join-Path $PWD "$file.sha256"), "$hash  $file`n")
+          "MCPB SHA-256: $hash"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mcpb
+          path: |
+            screenshotscout-mcp-*.mcpb
+            screenshotscout-mcp-*.mcpb.sha256
+          if-no-files-found: error
+
+  # Manual runs only: proves the MCP Registry key works by logging in and out.
+  credentials:
+    if: github.event_name == 'workflow_dispatch' && inputs.check_credentials
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Log in to the MCP Registry with the stored key, then log out
+        env:
+          MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$MCP_PRIVATE_KEY" ]]; then
+            echo "::error::The MCP_PRIVATE_KEY secret isn't set in the release environment."
+            exit 1
+          fi
+          tools="$RUNNER_TEMP/mcp-publisher"
+          mkdir -p "$tools"
+          base="https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}"
+          (
+            cd "$tools"
+            curl -fsSLO "$base/mcp-publisher_linux_amd64.tar.gz"
+            curl -fsSLO "$base/registry_${MCP_PUBLISHER_VERSION}_checksums.txt"
+            grep ' mcp-publisher_linux_amd64.tar.gz$' "registry_${MCP_PUBLISHER_VERSION}_checksums.txt" | sha256sum --check -
+            tar -xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
+          )
+          "$tools/mcp-publisher" login dns --domain screenshotscout.com --private-key "$MCP_PRIVATE_KEY"
+          "$tools/mcp-publisher" logout
+          echo "The MCP Registry accepted the screenshotscout.com key."
+
+  publish:
+    if: github.event_name == 'push'
+    needs: [build, bundle]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Use npm 11 (trusted publishing needs 11.5.1 or later)
+        run: npm install -g npm@11
+
+      - run: npm ci
+
+      - name: Publish to npm (trusted publishing, with provenance)
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$(npm view "@screenshotscout/mcp@$version" version 2>/dev/null)" == "$version" ]]; then
+            echo "@screenshotscout/mcp $version is already on npm."
+            exit 0
+          fi
+          flags=()
+          if [[ "$version" == *-* ]]; then flags+=(--tag next); fi
+          npm publish "${flags[@]}"
+
+      - name: Wait until npm serves the new version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for _ in $(seq 1 60); do
+            if [[ "$(npm view "@screenshotscout/mcp@$version" version 2>/dev/null)" == "$version" ]]; then
+              echo "@screenshotscout/mcp $version is live on npm."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::@screenshotscout/mcp $version isn't visible on npm after 10 minutes."
+          exit 1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/notes
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mcpb
+          path: ${{ runner.temp }}/mcpb
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "The GitHub release for $GITHUB_REF_NAME already exists."
+            exit 0
+          fi
+          bundle="$RUNNER_TEMP/mcpb/screenshotscout-mcp-$version.mcpb"
+          hash="$(cut -d ' ' -f 1 "$bundle.sha256")"
+          notes="$RUNNER_TEMP/notes/release-notes.md"
+          printf '\nMCPB SHA-256: `%s`\n' "$hash" >> "$notes"
+          flags=()
+          if [[ "$version" == *-* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "Screenshot Scout MCP Server $version" --notes-file "$notes" "${flags[@]}" \
+            "$bundle" "$bundle.sha256"
+
+      - name: Publish server.json to the MCP Registry
+        env:
+          MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
+        run: |
+          version="$(node -p "require('./server.json').version")"
+          if curl -fsS "https://registry.modelcontextprotocol.io/v0/servers/com.screenshotscout%2Fmcp/versions" \
+            | jq -e --arg v "$version" 'any(.servers[]; .server.version == $v)' >/dev/null; then
+            echo "com.screenshotscout/mcp $version is already in the MCP Registry."
+            exit 0
+          fi
+          if [[ -z "$MCP_PRIVATE_KEY" ]]; then
+            echo "::error::The MCP_PRIVATE_KEY secret isn't set in the release environment."
+            exit 1
+          fi
+          tools="$RUNNER_TEMP/mcp-publisher"
+          mkdir -p "$tools"
+          base="https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}"
+          (
+            cd "$tools"
+            curl -fsSLO "$base/mcp-publisher_linux_amd64.tar.gz"
+            curl -fsSLO "$base/registry_${MCP_PUBLISHER_VERSION}_checksums.txt"
+            grep ' mcp-publisher_linux_amd64.tar.gz$' "registry_${MCP_PUBLISHER_VERSION}_checksums.txt" | sha256sum --check -
+            tar -xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
+          )
+          # The login token lasts five minutes, so log in right before publishing.
+          "$tools/mcp-publisher" login dns --domain screenshotscout.com --private-key "$MCP_PRIVATE_KEY"
+          "$tools/mcp-publisher" publish
+          "$tools/mcp-publisher" logout
