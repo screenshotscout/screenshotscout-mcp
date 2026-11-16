@@ -46,7 +46,7 @@
     "prepack": "npm run build",
     "registry:validate": "node scripts/validate-server-json.mjs",
     "pretest": "npm run build",
-    "test": "tsx --test test/**/*.test.ts",
+    "test": "tsx --test \"test/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json"
   },
   "author": "Oleksii Velykyi",
