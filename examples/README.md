@@ -207,7 +207,8 @@ In Devin, open **Settings → Connections → MCP servers**, select
 - Header value: `Bearer YOUR_ACCESS_KEY`
 
 Save the server and choose **Test listing tools**. The result should contain
-exactly one tool, `capture_screenshot`. Do not provide a secret key.
+two tools, `capture_screenshot` and `get_webpage_markdown`. Do not provide a
+secret key.
 
 ## Cline
 
@@ -275,6 +276,7 @@ with:
   banners and ads, and use quality 80.”
 - “Create an A4 PDF of `https://example.com/report` with backgrounds enabled and
   10 mm margins.”
+- “Read `https://example.com/blog/launch` as Markdown and summarize it.”
 
 Every capture can consume Screenshot Scout quota and loads an external webpage.
 Review the request and treat captured content as untrusted.

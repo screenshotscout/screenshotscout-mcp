@@ -29,10 +29,10 @@ const DEFAULT_VIEWPORT_WIDTH = 1_280;
 const DEFAULT_VIEWPORT_HEIGHT = 720;
 const DEFAULT_JPEG_QUALITY = 60;
 
-const nonBlankStringSchema = z
+export const nonBlankStringSchema = z
   .string()
   .refine((value) => value.trim().length > 0, "Must not be blank.");
-const selectorListSchema = z
+export const selectorListSchema = z
   .array(nonBlankStringSchema)
   .min(1, "Provide at least one non-blank selector.");
 const cssLengthSchema = z
@@ -42,7 +42,7 @@ const cssLengthSchema = z
     /^(?:[0-9]+(?:\.[0-9]+)?)(?:\s*(?:px|in|mm|cm))?$/i,
     "Must be a non-negative CSS length in px, in, mm, or cm.",
   );
-const targetUrlSchema = z
+export const targetUrlSchema = z
   .string()
   .trim()
   .min(1)

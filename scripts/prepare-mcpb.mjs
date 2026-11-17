@@ -18,6 +18,7 @@ const runtimeFileAllowlist = new Set([
   "core/client.js",
   "core/errors.js",
   "core/image.js",
+  "core/markdown-tool.js",
   "core/redaction.js",
   "core/result.js",
   "core/tool-metadata.js",

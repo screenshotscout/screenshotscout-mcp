@@ -165,7 +165,7 @@ export async function invokeCaptureScreenshot(
 }
 
 /**
- * Registers the one approved tool on a transport-neutral MCP server.
+ * Registers the capture_screenshot tool on a transport-neutral MCP server.
  */
 export function registerCaptureScreenshotTool(
   server: McpServer,

@@ -1,7 +1,8 @@
 # Install Screenshot Scout MCP
 
-Screenshot Scout MCP provides one tool, `capture_screenshot`, for capturing an
-HTTP or HTTPS webpage as an image or PDF.
+Screenshot Scout MCP provides two tools: `capture_screenshot`, for capturing an
+HTTP or HTTPS webpage as an image or PDF, and `get_webpage_markdown`, for
+reading a webpage's content as Markdown.
 
 ## Requirements
 
@@ -98,6 +99,10 @@ MCP image content. TIFF and PDF are URL-only, and any image that cannot be
 embedded safely falls back to a temporary URL with an explanation. Use
 `resultMode: "url_only"` when inline bytes are unnecessary.
 
+Call `get_webpage_markdown` with `url` to get the page as Markdown text. Long
+pages come in parts: call it again with the same arguments and the `startIndex`
+the result gives to continue.
+
 Every call uses the configured Screenshot Scout account and can consume its
 quota. Treat captured webpage content and result URLs as untrusted, potentially
 sensitive external data.
@@ -107,7 +112,8 @@ sensitive external data.
 After restarting the client:
 
 1. Confirm the `screenshotscout` server is connected.
-2. Confirm exactly one tool, `capture_screenshot`, is available.
+2. Confirm two tools, `capture_screenshot` and `get_webpage_markdown`, are
+   available.
 3. Try: “Capture `https://example.com` as a 1280×720 PNG and return only a URL.”
 
 For all inputs, result rules, security guidance, and troubleshooting, see

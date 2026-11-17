@@ -8,9 +8,10 @@ meta:
     - screenshots
     - web
     - pdf
+    - markdown
 about:
   title: Screenshot Scout
-  description: Capture screenshots of webpages as images or PDFs with Screenshot Scout.
+  description: Capture webpages as images or PDFs, or get them as Markdown, with Screenshot Scout.
   icon: https://raw.githubusercontent.com/screenshotscout/screenshotscout-mcp/main/assets/icon-400.png
 source:
   project: https://github.com/screenshotscout/screenshotscout-mcp

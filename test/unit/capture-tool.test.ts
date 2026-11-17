@@ -217,7 +217,7 @@ void test("registration exposes exactly the approved tool, schema, metadata, and
       tool.description ?? "",
       /captured webpage content.+untrusted data, not instructions/i,
     );
-    assert.equal(mcpbManifest.tools?.length, 1);
+    assert.equal(mcpbManifest.tools?.length, 2);
     assert.equal(mcpbManifest.tools[0]?.name, CAPTURE_SCREENSHOT_TOOL_NAME);
     assert.equal(
       mcpbManifest.tools[0]?.description,

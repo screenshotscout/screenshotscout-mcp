@@ -39,6 +39,21 @@ globalThis.fetch = async (input, init) => {
     });
   }
 
+  if (format === "md") {
+    const markdown =
+      "# Example\n\n![Logo](https://example.com/logo.png)\n\nПривет\n";
+    return new globalThis.Response(Buffer.from(markdown, "utf8"), {
+      status: 200,
+      headers: {
+        "content-type": "text/markdown; charset=utf-8",
+        "screenshot-scout-cache-status": "MISS",
+        "screenshot-scout-screenshot-url":
+          "https://cdn.example.test/capture.md",
+        "screenshot-scout-screenshot-url-expires-at": "2026-07-25T12:00:00Z",
+      },
+    });
+  }
+
   if (format !== "png") {
     throw new Error("The stdio test mock received an unexpected format.");
   }

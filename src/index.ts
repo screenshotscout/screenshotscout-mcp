@@ -83,7 +83,26 @@ export {
   CAPTURE_SCREENSHOT_TOOL_DESCRIPTION,
   CAPTURE_SCREENSHOT_TOOL_NAME,
   CAPTURE_SCREENSHOT_TOOL_TITLE,
+  GET_WEBPAGE_MARKDOWN_TOOL_ANNOTATIONS,
+  GET_WEBPAGE_MARKDOWN_TOOL_DESCRIPTION,
+  GET_WEBPAGE_MARKDOWN_TOOL_NAME,
+  GET_WEBPAGE_MARKDOWN_TOOL_TITLE,
 } from "./core/tool-metadata.js";
+export {
+  DEFAULT_MARKDOWN_MAX_LENGTH,
+  MAX_MARKDOWN_MAX_LENGTH,
+  getWebpageMarkdownInputSchema,
+  invokeGetWebpageMarkdown,
+  mapMarkdownInputToSdk,
+  markdownResultMetadataSchema,
+  registerGetWebpageMarkdownTool,
+  replaceImagesWithAltText,
+} from "./core/markdown-tool.js";
+export type {
+  GetWebpageMarkdownInput,
+  MappedMarkdownRequest,
+  MarkdownResultMetadata,
+} from "./core/markdown-tool.js";
 export {
   DEFAULT_MAX_HTTP_REQUEST_BODY_BYTES,
   SCREENSHOTSCOUT_API_KEY_MCP_PATH,

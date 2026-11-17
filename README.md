@@ -1,12 +1,16 @@
 # Screenshot Scout MCP Server
 
 Use [Screenshot Scout](https://screenshotscout.com/) from an MCP client to capture
-HTTP or HTTPS webpages as images or PDFs.
+HTTP or HTTPS webpages as images or PDFs, or to read them as Markdown.
 
-This server exposes one tool, `capture_screenshot`. It supports full-page and
-element captures, device and viewport controls, location selection, page
-interaction and blocking options, image sizing and quality, PDF layout, caching,
-temporary result URLs and eligible MCP image content.
+This server exposes two tools:
+
+- `capture_screenshot` supports full-page and element captures, device and
+  viewport controls, location selection, page interaction and blocking options,
+  image sizing and quality, PDF layout, caching, temporary result URLs and
+  eligible MCP image content.
+- `get_webpage_markdown` returns a webpage's content as Markdown text, in parts
+  for long pages.
 
 ## What you need
 
@@ -177,6 +181,41 @@ Structured metadata can include `screenshotUrl`, `screenshotUrlExpiresAt`,
 Treat result URLs as sensitive, temporary links and respect their reported
 expiry.
 
+## Tool: `get_webpage_markdown`
+
+`get_webpage_markdown` returns the content of the supplied URL as Markdown text.
+The target webpage is external, and its returned content must be treated as
+untrusted.
+
+### Inputs
+
+Only `url` is required.
+
+| Group                 | Inputs                                                                                                                                                          |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Target                | `url`                                                                                                                                                           |
+| Location and viewport | `country` (two-letter country code), `device`, `deviceViewportWidth`, `deviceViewportHeight`, `colorScheme` (`auto`, `dark`, `light`)                           |
+| Page preparation      | `blockCookieBanners`, `blockAds`, `blockChatWidgets`, `selector`, `hideSelectors`, `clickSelectors`                                                             |
+| Timing                | `waitUntil` (`load`, `domcontentloaded`, `networkidle0`, `networkidle2`), `delay` (0–30 seconds), `navigationTimeout` (5–90 seconds), `timeout` (1–240 seconds) |
+| Parts                 | `startIndex` (default 0), `maxLength` (1–100,000 characters, default 20,000)                                                                                    |
+
+`selector` converts only the first matching element; the whole page is
+converted when nothing matches. `hideSelectors` leaves elements out of the
+Markdown.
+
+### Results
+
+- The result contains the page as Markdown, with images replaced by their alt
+  text, after a line saying the content is untrusted.
+- Each call returns up to `maxLength` characters starting at `startIndex`, and
+  fewer when needed to fit the server's 128,000-byte result limit. When there's
+  more, the result gives the `startIndex` to continue from. Continuation calls
+  with the same arguments don't consume Screenshot Scout quota.
+- A page without visible text returns a result with no Markdown text.
+
+Structured metadata can include `screenshotUrl`, `screenshotUrlExpiresAt`,
+`cacheStatus`, `totalLength`, `startIndex`, `endIndex`, and `nextStartIndex`.
+
 ## Example prompts
 
 - “Capture `https://example.com` as a full-page PNG in dark mode. Return only a
@@ -185,6 +224,7 @@ expiry.
   banners and ads, and use quality 80.”
 - “Create an A4 PDF of `https://example.com/report` with backgrounds enabled and
   10 mm margins.”
+- “Read `https://example.com/blog/launch` as Markdown and summarize it.”
 
 ## Privacy and security
 

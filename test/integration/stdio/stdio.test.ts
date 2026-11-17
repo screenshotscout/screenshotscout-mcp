@@ -16,6 +16,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import {
   CAPTURE_SCREENSHOT_TOOL_NAME,
+  GET_WEBPAGE_MARKDOWN_TOOL_NAME,
   SCREENSHOTSCOUT_MCP_SERVER_INSTRUCTIONS,
   SCREENSHOTSCOUT_MCP_SERVER_NAME,
   SCREENSHOTSCOUT_MCP_SERVER_VERSION,
@@ -63,6 +64,10 @@ void test(
         );
         assert.match(
           client.getInstructions() ?? "",
+          /call get_webpage_markdown with only url/i,
+        );
+        assert.match(
+          client.getInstructions() ?? "",
           /optional arguments only when the user explicitly requests them/i,
         );
         assert.match(
@@ -71,8 +76,10 @@ void test(
         );
 
         const listed = await client.listTools();
-        assert.equal(listed.tools.length, 1);
-        assert.equal(listed.tools[0]?.name, CAPTURE_SCREENSHOT_TOOL_NAME);
+        assert.deepEqual(
+          listed.tools.map((tool) => tool.name),
+          [CAPTURE_SCREENSHOT_TOOL_NAME, GET_WEBPAGE_MARKDOWN_TOOL_NAME],
+        );
 
         const image = asCallToolResult(
           await client.callTool({
@@ -124,6 +131,30 @@ void test(
           format: "pdf",
           mimeType: "application/pdf",
           inlineImageIncluded: false,
+        });
+
+        const markdown = asCallToolResult(
+          await client.callTool({
+            name: GET_WEBPAGE_MARKDOWN_TOOL_NAME,
+            arguments: { url: targetUrl },
+          }),
+        );
+        assert.equal(markdown.isError, undefined);
+        assert.deepEqual(
+          markdown.content.map((content) => content.type),
+          ["text", "text"],
+        );
+        assert.deepEqual(markdown.content[1], {
+          type: "text",
+          text: "# Example\n\nLogo\n\nПривет\n",
+        });
+        assert.deepEqual(markdown.structuredContent, {
+          screenshotUrl: "https://cdn.example.test/capture.md",
+          screenshotUrlExpiresAt: "2026-07-25T12:00:00Z",
+          cacheStatus: "MISS",
+          totalLength: 24,
+          startIndex: 0,
+          endIndex: 24,
         });
 
         return { image, pdf };

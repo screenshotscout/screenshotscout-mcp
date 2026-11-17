@@ -15,6 +15,7 @@ import type {
 
 import {
   CAPTURE_SCREENSHOT_TOOL_NAME,
+  GET_WEBPAGE_MARKDOWN_TOOL_NAME,
   SCREENSHOTSCOUT_API_KEY_MCP_PATH,
   SCREENSHOTSCOUT_MCP_SERVER_INSTRUCTIONS,
   SCREENSHOTSCOUT_MCP_SERVER_NAME,
@@ -74,8 +75,10 @@ void test(
       assert.equal(transport.sessionId, undefined);
 
       const listed = await client.listTools();
-      assert.equal(listed.tools.length, 1);
-      assert.equal(listed.tools[0]?.name, CAPTURE_SCREENSHOT_TOOL_NAME);
+      assert.deepEqual(
+        listed.tools.map((tool) => tool.name),
+        [CAPTURE_SCREENSHOT_TOOL_NAME, GET_WEBPAGE_MARKDOWN_TOOL_NAME],
+      );
 
       const image = asCallToolResult(
         await client.callTool({

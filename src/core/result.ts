@@ -15,7 +15,7 @@ const omissionReasonValues = Object.values(INLINE_IMAGE_OMISSION_REASONS) as [
   ...InlineImageOmissionReason[],
 ];
 
-const httpUrlSchema = z
+export const httpUrlSchema = z
   .string()
   .max(8_192)
   .url()

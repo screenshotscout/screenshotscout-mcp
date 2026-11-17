@@ -48,11 +48,13 @@ try {
   const listed = await client.listTools();
   assert.deepEqual(
     listed.tools.map((tool) => tool.name),
-    ["capture_screenshot"],
+    ["capture_screenshot", "get_webpage_markdown"],
   );
 } finally {
   await client.close().catch(() => undefined);
 }
 
 assert.equal(stderr.includes(accessKey), false);
-process.stdout.write("Bundled MCPB stdio runtime starts and lists one tool.\n");
+process.stdout.write(
+  "Bundled MCPB stdio runtime starts and lists both tools.\n",
+);
