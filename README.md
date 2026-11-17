@@ -79,7 +79,7 @@ To install the Claude Desktop extension:
 4. Enter the required access key. Enter the secret key only for an API key that
    requires signed requests.
 
-Claude Desktop treats both fields as sensitive settings. The `v0.5.0` MCPB
+Claude Desktop treats both fields as sensitive settings. The `v0.6.0` MCPB
 supports Windows.
 
 ## Hosted Streamable HTTP
