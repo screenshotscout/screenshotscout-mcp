@@ -1,3 +1,4 @@
+import { GFM, parser as commonMarkParser } from "@lezer/markdown";
 import type {
   McpServer,
   RegisteredTool,
@@ -207,23 +208,62 @@ export function mapMarkdownInputToSdk(
   });
 }
 
-/** Replaces Markdown images with their alt text, outside fenced code blocks. */
+const markdownParser = commonMarkParser.configure(GFM);
+
+type MarkdownNode = ReturnType<typeof markdownParser.parse>["topNode"];
+
+/**
+ * Replaces Markdown images with their alt text, as written in the Markdown.
+ * The Markdown is parsed the way renderers read it (GitHub Flavored Markdown),
+ * so code is left as it is, and parentheses in an image's URL or title don't
+ * end it early.
+ */
 export function replaceImagesWithAltText(markdown: string): string {
-  let inFence = false;
-  return markdown
-    .split("\n")
-    .map((line) => {
-      const trimmed = line.trimStart();
-      if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
-        inFence = !inFence;
-        return line;
+  let result = "";
+  let copiedUpTo = 0;
+  markdownParser.parse(markdown).iterate({
+    enter: (node) => {
+      if (node.name !== "Image") {
+        return true;
       }
-      return inFence ? line : line.replace(MARKDOWN_IMAGE, "$1");
-    })
-    .join("\n");
+      result +=
+        markdown.slice(copiedUpTo, node.from) + altText(markdown, node.node);
+      copiedUpTo = node.to;
+      return false;
+    },
+  });
+  return result + markdown.slice(copiedUpTo);
 }
 
-const MARKDOWN_IMAGE = /!\[((?:\\.|[^\]\\])*)\]\([^)]*\)/g;
+/** The text between `![` and `]`, with any image inside it replaced as well. */
+function altText(markdown: string, image: MarkdownNode): string {
+  const [open, close] = image.getChildren("LinkMark");
+  if (open === undefined || close === undefined) {
+    return "";
+  }
+  let text = "";
+  let copiedUpTo = open.to;
+  const replaceNestedImages = (parent: MarkdownNode): void => {
+    for (
+      let child = parent.firstChild;
+      child !== null;
+      child = child.nextSibling
+    ) {
+      if (child.to <= open.to || child.from >= close.from) {
+        continue;
+      }
+      if (child.name === "Image") {
+        text +=
+          markdown.slice(copiedUpTo, child.from) + altText(markdown, child);
+        copiedUpTo = child.to;
+      } else {
+        replaceNestedImages(child);
+      }
+    }
+  };
+  replaceNestedImages(image);
+  return text + markdown.slice(copiedUpTo, close.from);
+}
 
 /**
  * Converts a webpage to Markdown through the official Screenshot Scout SDK

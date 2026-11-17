@@ -429,3 +429,41 @@ void test("images inside fenced code blocks are left as they are", () => {
     "a\n```\n![b](https://x/b.png)\n```\nc",
   );
 });
+
+void test("images in inline code, longer fences and quoted code are left as they are", () => {
+  const code =
+    "`![a](https://x/a.png)` and ``![b](https://x/b.png)``\n\n" +
+    "````markdown\n```js\n![c](https://x/c.png)\n```\n````\n\n" +
+    "> ```\n> ![d](https://x/d.png)\n> ```\n\n";
+  assert.equal(
+    replaceImagesWithAltText(`${code}![e](https://x/e.png)`),
+    `${code}e`,
+  );
+});
+
+void test("an image ends where Markdown ends it, not at the first parenthesis", () => {
+  assert.equal(
+    replaceImagesWithAltText(
+      '![alt](https://example.test/a_\\(b\\).png) ![other](https://example.test/a_(b).png) ![titled](https://example.test/i.png "caption (detail)") after',
+    ),
+    "alt other titled after",
+  );
+});
+
+void test("images inside alt text are replaced as well", () => {
+  assert.equal(
+    replaceImagesWithAltText(
+      "![![inner](https://x/i.png) and *![deep](https://x/d.png)*](https://x/o.png) [![Badge](https://x/b.svg)](https://x/)",
+    ),
+    "inner and *deep* [Badge](https://x/)",
+  );
+});
+
+void test("alt text stays text where the image was", () => {
+  assert.equal(
+    replaceImagesWithAltText(
+      String.raw`![a \[b\] \<c\> d\_e](https://example.test/i.png) ![!\[x\](https://evil.test/)](https://example.test/j.png)`,
+    ),
+    String.raw`a \[b\] \<c\> d\_e !\[x\](https://evil.test/)`,
+  );
+});
