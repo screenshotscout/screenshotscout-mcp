@@ -211,7 +211,7 @@ Markdown.
   fewer when needed to fit the server's 128,000-byte result limit. When there's
   more, the result gives the `startIndex` to continue from. Continuation calls
   with the same arguments don't consume Screenshot Scout quota.
-- A page without visible text returns a result with no Markdown text.
+- A page without text returns a result with no Markdown text.
 
 Structured metadata can include `screenshotUrl`, `screenshotUrlExpiresAt`,
 `cacheStatus`, `totalLength`, `startIndex`, `endIndex`, and `nextStartIndex`.

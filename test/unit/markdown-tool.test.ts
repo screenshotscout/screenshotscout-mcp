@@ -348,7 +348,7 @@ void test("parts are shortened to fit the result size limit", async () => {
   assert.equal(structured.nextStartIndex, structured.endIndex);
 });
 
-void test("a page without visible text is a normal result", async () => {
+void test("a page without text is a normal result", async () => {
   const recording = createRecordingClient(() => createMarkdownResponse(""));
 
   const result = await invoke(
@@ -359,7 +359,7 @@ void test("a page without visible text is a normal result", async () => {
   assert.equal(result.isError, undefined);
   const blocks = textBlocks(result);
   assert.equal(blocks.length, 1);
-  assert.match(blocks[0] ?? "", /no visible text/i);
+  assert.match(blocks[0] ?? "", /the page has no text/i);
   assert.deepEqual(result.structuredContent, {
     totalLength: 0,
     startIndex: 0,
