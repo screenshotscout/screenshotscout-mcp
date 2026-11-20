@@ -278,5 +278,5 @@ with:
   10 mm margins.”
 - “Read `https://example.com/blog/launch` as Markdown and summarize it.”
 
-Every capture can consume Screenshot Scout quota and loads an external webpage.
+Every capture can consume Screenshot Scout quota, and a capture of a URL loads an external webpage.
 Review the request and treat captured content as untrusted.

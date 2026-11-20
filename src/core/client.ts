@@ -2,6 +2,7 @@ import {
   ScreenshotScoutClient,
   type BinaryCaptureOptions,
   type BinaryCaptureResponse,
+  type CaptureFromHtmlRequestOptions,
   type CaptureRequestOptions,
   type ScreenshotScoutClientOptions,
   type ScreenshotScoutFetch,
@@ -17,6 +18,11 @@ export interface ScreenshotScoutCaptureClient {
     targetUrl: string,
     captureOptions?: BinaryCaptureOptions | null,
     captureRequestOptions?: CaptureRequestOptions | null,
+  ): Promise<BinaryCaptureResponse>;
+  captureFromHtml(
+    html: string,
+    captureOptions?: BinaryCaptureOptions | null,
+    requestOptions?: CaptureFromHtmlRequestOptions | null,
   ): Promise<BinaryCaptureResponse>;
 }
 

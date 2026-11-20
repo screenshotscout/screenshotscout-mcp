@@ -24,6 +24,8 @@ function recordOptions(
         recorded = options;
         return {
           capture: () => Promise.reject(new Error("Unexpected capture")),
+          captureFromHtml: () =>
+            Promise.reject(new Error("Unexpected HTML capture")),
         };
       },
     },
@@ -83,8 +85,12 @@ void test("the core never lets the SDK read SCREENSHOTSCOUT_BASE_URL", async () 
       );
 
       await client.capture("https://example.com");
+      await client.captureFromHtml("<!doctype html><title>Example</title>");
 
-      assert.deepEqual(requestedUrls, [PRODUCTION_CAPTURE_URL]);
+      assert.deepEqual(requestedUrls, [
+        PRODUCTION_CAPTURE_URL,
+        PRODUCTION_CAPTURE_URL,
+      ]);
     }
   } finally {
     if (previous === undefined) delete process.env.SCREENSHOTSCOUT_BASE_URL;

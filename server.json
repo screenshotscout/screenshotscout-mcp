@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.screenshotscout/mcp",
   "title": "Screenshot Scout",
-  "description": "Capture webpages as images or PDFs, or get them as Markdown, with Screenshot Scout.",
+  "description": "Capture webpages or HTML as images or PDFs, or get webpages as Markdown, with Screenshot Scout.",
   "version": "0.6.0",
   "websiteUrl": "https://screenshotscout.com/mcp",
   "repository": {

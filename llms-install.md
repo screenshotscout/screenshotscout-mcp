@@ -1,8 +1,8 @@
 # Install Screenshot Scout MCP
 
 Screenshot Scout MCP provides two tools: `capture_screenshot`, for capturing an
-HTTP or HTTPS webpage as an image or PDF, and `get_webpage_markdown`, for
-reading a webpage's content as Markdown.
+HTTP or HTTPS webpage, or HTML you provide, as an image or PDF, and
+`get_webpage_markdown`, for reading a webpage's content as Markdown.
 
 ## Requirements
 
@@ -90,9 +90,15 @@ headers:
 
 ## Tool behavior
 
-Call `capture_screenshot` with `url` and optional capture settings. Captures use
-a 1280×720 viewport by default. When no format is specified, the tool returns
-JPEG at quality 60.
+Call `capture_screenshot` with `url` and optional capture settings. To render an
+HTML document instead, such as one you wrote, pass it as `html` in place of
+`url`. Captures use a 1280×720 viewport by default. When no format is specified,
+the tool returns JPEG at quality 60.
+
+A server with `SCREENSHOTSCOUT_SECRET_KEY` can't send `html`, and neither can an
+access key that requires signed requests: HTML travels in a POST request, which
+can't be signed. The hosted endpoint accepts MCP requests of up to 1 MiB,
+including the HTML.
 
 With `resultMode: "auto"`, eligible PNG/JPEG/WebP/GIF results may be returned as
 MCP image content. TIFF and PDF are URL-only, and any image that cannot be

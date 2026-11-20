@@ -27,6 +27,8 @@ const executablePath = join(repositoryRoot, "dist", "stdio.js");
 const mockFetchPath = fileURLToPath(
   new URL("../../fixtures/stdio-mock-fetch.mjs", import.meta.url),
 );
+const invoiceHtml =
+  "<!doctype html>\n<html><head><title>Invoice #1042 for Ada Lovelace</title></head><body><h1>Invoice #1042</h1></body></html>\n";
 
 type StdioSessionResult<T> = {
   readonly result: T;
@@ -61,6 +63,10 @@ void test(
         assert.match(
           client.getInstructions() ?? "",
           /call capture_screenshot with only url/i,
+        );
+        assert.match(
+          client.getInstructions() ?? "",
+          /To render HTML you wrote, call capture_screenshot with html instead of url\./,
         );
         assert.match(
           client.getInstructions() ?? "",
@@ -157,6 +163,21 @@ void test(
           endIndex: 24,
         });
 
+        // HTML travels in a POST request, which can't be signed, so it's refused before sending.
+        const html = asCallToolResult(
+          await client.callTool({
+            name: CAPTURE_SCREENSHOT_TOOL_NAME,
+            arguments: { html: invoiceHtml, format: "pdf" },
+          }),
+        );
+        assert.equal(html.isError, true);
+        assert.deepEqual(html.content, [
+          {
+            type: "text",
+            text: "Screenshot Scout capture failed.\nMessage: html can't be sent while this server has a secret key, because HTML travels in a POST request, which can't be signed.\nHow to resolve: Remove SCREENSHOTSCOUT_SECRET_KEY and use an access key that doesn't require signed requests.",
+          },
+        ]);
+
         return { image, pdf };
       },
     );
@@ -167,6 +188,47 @@ void test(
       accessKey,
       secretKey,
       targetUrl,
+      invoiceHtml,
+      "Ada Lovelace",
+    ]);
+  },
+);
+
+void test(
+  "the stdio executable sends html in an unsigned POST",
+  { timeout: 15_000 },
+  async () => {
+    const accessKey = createAccessKey();
+
+    const session = await runStdioSession(
+      {
+        SCREENSHOTSCOUT_ACCESS_KEY: accessKey,
+        SCREENSHOTSCOUT_MCP_TEST_SIGNING_EXPECTATION: "absent",
+      },
+      async (client) =>
+        asCallToolResult(
+          await client.callTool({
+            name: CAPTURE_SCREENSHOT_TOOL_NAME,
+            arguments: { html: invoiceHtml, format: "pdf" },
+          }),
+        ),
+    );
+
+    assert.equal(session.result.isError, undefined);
+    assert.deepEqual(session.result.structuredContent, {
+      screenshotUrl: "https://cdn.example.test/capture.pdf",
+      screenshotUrlExpiresAt: "2026-07-25T12:00:00Z",
+      cacheStatus: "MISS",
+      format: "pdf",
+      mimeType: "application/pdf",
+      inlineImageIncluded: false,
+    });
+    assertProtocolOnly(session.stdout);
+    assert.equal(session.stderr, "");
+    assertNoSensitiveOutput(session.stdout, session.stderr, [
+      accessKey,
+      invoiceHtml,
+      "Ada Lovelace",
     ]);
   },
 );

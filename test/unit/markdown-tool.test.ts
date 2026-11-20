@@ -69,6 +69,9 @@ function createRecordingClient(
       calls.push({ targetUrl, captureOptions, captureRequestOptions });
       return responseFactory();
     },
+    // get_webpage_markdown is URL-only.
+    captureFromHtml: () =>
+      Promise.reject(new Error("The Markdown tool must not send HTML.")),
   };
   return { client, calls };
 }

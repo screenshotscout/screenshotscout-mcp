@@ -60,12 +60,22 @@ export async function invokeCaptureScreenshot(
 
   try {
     const mappedRequest = mapCaptureInputToSdk(input);
-    // The SDK picks the method: POST, or a signed GET when the client has a secret key.
-    const response = await dependencies.client.capture(
-      mappedRequest.targetUrl,
-      mappedRequest.captureOptions,
-      context.signal === undefined ? {} : { signal: context.signal },
-    );
+    const requestOptions =
+      context.signal === undefined ? {} : { signal: context.signal };
+    // For a URL, the SDK picks the method: POST, or a signed GET when the client has a secret key.
+    // HTML always goes in a POST, so a client with a secret key refuses it.
+    const response =
+      mappedRequest.html === undefined
+        ? await dependencies.client.capture(
+            mappedRequest.targetUrl,
+            mappedRequest.captureOptions,
+            requestOptions,
+          )
+        : await dependencies.client.captureFromHtml(
+            mappedRequest.html,
+            mappedRequest.captureOptions,
+            requestOptions,
+          );
     const mimeType = normalizeMimeType(response.rawResponse.contentType);
     const baseMetadata: CaptureResultMetadata = {
       ...(response.screenshotUrl === undefined
@@ -156,7 +166,8 @@ export async function invokeCaptureScreenshot(
           )
         : error;
     return formatScreenshotScoutError(captureError, {
-      sensitiveValues: [input.url, ...configuredSensitiveValues],
+      sensitiveValues: [input.url, input.html, ...configuredSensitiveValues],
+      ...(input.html === undefined ? {} : { fromHtml: true }),
       ...(dependencies.onUnexpectedError === undefined
         ? {}
         : { onUnexpectedError: dependencies.onUnexpectedError }),

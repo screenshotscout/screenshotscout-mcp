@@ -15,7 +15,7 @@ import {
 import { createScreenshotScoutMcpServer } from "./server.js";
 
 export const SCREENSHOTSCOUT_API_KEY_MCP_PATH = "/mcp/api-key";
-export const DEFAULT_MAX_HTTP_REQUEST_BODY_BYTES = 64 * 1_024;
+export const DEFAULT_MAX_HTTP_REQUEST_BODY_BYTES = 1_024 * 1_024;
 
 const BEARER_AUTHORIZATION_PATTERN =
   /^[\t ]*Bearer +([A-Za-z0-9\-._~+/]+=*)[\t ]*$/i;
@@ -79,6 +79,7 @@ export function createScreenshotScoutApiKeyHttpHandler(
   const maxRequestBodyBytes = resolveRequestBodyLimit(
     options.maxRequestBodyBytes,
   );
+  const requestTooLargeMessage = `The MCP request body is too large. It can be at most ${formatByteLimit(maxRequestBodyBytes)}.`;
 
   return async (request) => {
     const sensitiveValues: string[] = [];
@@ -158,12 +159,9 @@ export function createScreenshotScoutApiKeyHttpHandler(
         (typeof declaredLength === "number" &&
           declaredLength > maxRequestBodyBytes)
       ) {
+        await discardRequestBody(request);
         return secureResponse(
-          jsonRpcErrorResponse(
-            413,
-            -32000,
-            "The MCP request body is too large.",
-          ),
+          jsonRpcErrorResponse(413, -32000, requestTooLargeMessage),
         );
       }
 
@@ -173,11 +171,7 @@ export function createScreenshotScoutApiKeyHttpHandler(
       } catch (error) {
         if (error instanceof RequestBodyTooLargeError) {
           return secureResponse(
-            jsonRpcErrorResponse(
-              413,
-              -32000,
-              "The MCP request body is too large.",
-            ),
+            jsonRpcErrorResponse(413, -32000, requestTooLargeMessage),
           );
         }
         return secureResponse(
@@ -262,25 +256,33 @@ function bindRequestCancellation(
 ): ScreenshotScoutCaptureClient {
   return {
     capture(targetUrl, captureOptions, captureRequestOptions) {
-      const invocationSignal =
-        captureRequestOptions?.signal === null
-          ? undefined
-          : captureRequestOptions?.signal;
-      const signal =
-        invocationSignal === undefined || invocationSignal === requestSignal
-          ? requestSignal
-          : AbortSignal.any([requestSignal, invocationSignal]);
       const requestOptions: CaptureRequestOptions = {
         ...(captureRequestOptions?.method === undefined ||
         captureRequestOptions.method === null
           ? {}
           : { method: captureRequestOptions.method }),
-        signal,
+        signal: combineSignals(requestSignal, captureRequestOptions?.signal),
       };
 
       return client.capture(targetUrl, captureOptions, requestOptions);
     },
+    captureFromHtml(html, captureOptions, requestOptions) {
+      return client.captureFromHtml(html, captureOptions, {
+        signal: combineSignals(requestSignal, requestOptions?.signal),
+      });
+    },
   };
+}
+
+function combineSignals(
+  requestSignal: AbortSignal,
+  invocationSignal: AbortSignal | null | undefined,
+): AbortSignal {
+  return invocationSignal === undefined ||
+    invocationSignal === null ||
+    invocationSignal === requestSignal
+    ? requestSignal
+    : AbortSignal.any([requestSignal, invocationSignal]);
 }
 
 function validateHost(
@@ -539,7 +541,8 @@ async function readBodyBytes(
 
       totalBytes += next.value.byteLength;
       if (totalBytes > maxRequestBodyBytes) {
-        await reader.cancel().catch(() => undefined);
+        chunks.length = 0;
+        await discardRemainingBody(reader, request.signal);
         throw new RequestBodyTooLargeError();
       }
       chunks.push(next.value);
@@ -564,6 +567,39 @@ async function readBodyBytes(
     offset += chunk.byteLength;
   }
   return output;
+}
+
+// Reads the rest of an oversized body without keeping it. Many HTTP/1.1 clients send the whole body
+// before reading the response, and see a reset connection instead of the 413 if the server stops
+// reading.
+async function discardRemainingBody(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+): Promise<void> {
+  try {
+    while (!signal.aborted) {
+      const next = await reader.read();
+      if (next.done) return;
+    }
+  } catch {
+    // The client went away, so there's no one left to answer.
+  }
+}
+
+async function discardRequestBody(request: Request): Promise<void> {
+  if (request.body === null || request.body.locked) return;
+  const reader = request.body.getReader();
+  try {
+    await discardRemainingBody(reader, request.signal);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function formatByteLimit(bytes: number): string {
+  if (bytes % (1_024 * 1_024) === 0) return `${bytes / (1_024 * 1_024)} MiB`;
+  if (bytes % 1_024 === 0) return `${bytes / 1_024} KiB`;
+  return `${bytes} bytes`;
 }
 
 function resolveRequestBodyLimit(value: number | undefined): number {

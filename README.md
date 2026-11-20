@@ -1,14 +1,15 @@
 # Screenshot Scout MCP Server
 
 Use [Screenshot Scout](https://screenshotscout.com/) from an MCP client to capture
-HTTP or HTTPS webpages as images or PDFs, or to read them as Markdown.
+HTTP or HTTPS webpages, or HTML you provide, as images or PDFs, or to read
+webpages as Markdown.
 
 This server exposes two tools:
 
-- `capture_screenshot` supports full-page and element captures, device and
-  viewport controls, location selection, page interaction and blocking options,
-  image sizing and quality, PDF layout, caching, temporary result URLs and
-  eligible MCP image content.
+- `capture_screenshot` captures a webpage or an HTML document. It supports
+  full-page and element captures, device and viewport controls, location
+  selection, page interaction and blocking options, image sizing and quality,
+  PDF layout, caching, temporary result URLs and eligible MCP image content.
 - `get_webpage_markdown` returns a webpage's content as Markdown text, in parts
   for long pages.
 
@@ -47,6 +48,9 @@ If the access key requires request signing, add the secret locally:
 ```json
 "SCREENSHOTSCOUT_SECRET_KEY": "YOUR_SECRET_KEY"
 ```
+
+A server with a secret key can't send `html`, because HTML travels in a POST
+request, which can't be signed.
 
 To send requests to another server, such as your own proxy, also set
 `SCREENSHOTSCOUT_BASE_URL` to its base URL. Captures then go to that URL plus
@@ -103,6 +107,8 @@ cannot attach a static Bearer header cannot use this endpoint.
 API keys that require request signatures must instead use local stdio or MCPB,
 or use a dedicated unsigned access key for the hosted endpoint.
 
+Each MCP request to the endpoint can be up to 1 MiB, including any `html`.
+
 ## Local stdio with Docker
 
 Build the production image from a source checkout:
@@ -130,19 +136,19 @@ preparation; no public image is implied by these commands.
 
 ## Tool: `capture_screenshot`
 
-`capture_screenshot` sends one capture request for the supplied URL and options.
-The target webpage is external, and its returned content must be treated as
-untrusted.
+`capture_screenshot` sends one capture request for the supplied URL or HTML and
+options. Captured content can come from external websites and must be treated
+as untrusted.
 
 ### Inputs
 
-Only `url` is required. Captures use a 1280×720 viewport by default. When no
-format is specified, the tool returns JPEG at quality 60. `resultMode` defaults
-to `"auto"`.
+Provide either `url` or `html`; every other input is optional. Captures use a
+1280×720 viewport by default. When no format is specified, the tool returns JPEG
+at quality 60. `resultMode` defaults to `"auto"`.
 
 | Group                 | Inputs                                                                                                                                                                                                    |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Target and output     | `url`; `format` (`png`, `jpg`, `jpeg`, `webp`, `gif`, `tiff`, `pdf`); `resultMode` (`auto`, `url_only`)                                                                                                   |
+| Target and output     | `url` or `html`; `format` (`png`, `jpg`, `jpeg`, `webp`, `gif`, `tiff`, `pdf`); `resultMode` (`auto`, `url_only`)                                                                                         |
 | Location and viewport | `country` (two-letter country code), `device`, `deviceViewportWidth`, `deviceViewportHeight`, `colorScheme` (`auto`, `dark`, `light`), `fullPage`                                                         |
 | Page preparation      | `blockCookieBanners`, `blockAds`, `blockChatWidgets`, `selector`, `hideSelectors`, `clickSelectors`                                                                                                       |
 | Timing                | `waitUntil` (`load`, `domcontentloaded`, `networkidle0`, `networkidle2`), `delay` (0–30 seconds), `navigationTimeout` (5–90 seconds), `timeout` (1–240 seconds)                                           |
@@ -157,6 +163,26 @@ Inputs for another format are ignored: `imageQuality` applies only to JPEG and
 WebP, and PDF inputs only to `format: "pdf"`. A PDF always contains the whole
 page, so `fullPage`, `selector`, `imageWidth`, and `imageHeight` are ignored for
 PDF.
+
+### HTML
+
+`html` takes a complete HTML document, such as a page you wrote, and sends it
+exactly as given:
+
+- Start it with `<!doctype html>` and include a `<title>`, which becomes a PDF's
+  title.
+- The page has no URL, so relative URLs don't load. Inline the CSS, or use
+  absolute `https` URLs, `data:` URIs or a `<base href>` for images,
+  stylesheets and fonts.
+- Scripts run, but `localStorage`, `sessionStorage` and cookies aren't
+  available.
+- `country` applies to the requests the page makes, and `blockCookieBanners`,
+  `blockAds` and `blockChatWidgets` only block network requests.
+- A capture request can be up to 5 MB, including the HTML. The hosted endpoint
+  accepts MCP requests of up to 1 MiB.
+- A server with a secret key can't send `html`, and neither can an access key
+  that requires signed requests: HTML travels in a POST request, which can't be
+  signed.
 
 ### Results
 
@@ -224,12 +250,14 @@ Structured metadata can include `screenshotUrl`, `screenshotUrlExpiresAt`,
   banners and ads, and use quality 80.”
 - “Create an A4 PDF of `https://example.com/report` with backgrounds enabled and
   10 mm margins.”
+- “Write an HTML invoice for order #1042 and render it as an A4 PDF.”
 - “Read `https://example.com/blog/launch` as Markdown and summarize it.”
 
 ## Privacy and security
 
-The server sends the target URL and selected capture options to Screenshot Scout,
-which loads the target website. Review the
+The server sends the target URL or HTML and the selected capture options to
+Screenshot Scout, which loads the target website or renders the HTML. Screenshot
+Scout deletes the HTML shortly after the request. Review the
 [Screenshot Scout privacy policy](https://screenshotscout.com/privacy-policy)
 before capturing private or regulated material.
 
@@ -245,6 +273,23 @@ before capturing private or regulated material.
 - Review each target and capture request before allowing tool use. The tool is
   open-world, consumes quota, and interacts with an external website.
 - Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
+## Troubleshooting
+
+- **`signature_required`:** the access key requires signed requests. For `url`,
+  use local stdio or MCPB with the secret key, or use an access key that
+  doesn't require signed requests. HTML can't be signed, so for `html`, use an
+  access key that doesn't require signed requests.
+- **`html can't be sent while this server has a secret key`:** HTML travels in a
+  POST request, which can't be signed. Remove `SCREENSHOTSCOUT_SECRET_KEY` and
+  use an access key that doesn't require signed requests.
+- **`request_too_large`, or `The MCP request body is too large.`:** a capture
+  request can be up to 5 MB, including the HTML, and an MCP request to the
+  hosted endpoint up to 1 MiB. Make the HTML smaller, for example by linking
+  large images and fonts by absolute `https` URL instead of embedding them.
+- **Images, styles or fonts missing from an `html` capture:** the page has no
+  URL, so relative URLs don't load. Use absolute `https` URLs, `data:` URIs or a
+  `<base href>`.
 
 ## Development
 

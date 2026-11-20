@@ -108,6 +108,10 @@ function validateSignedGetRequest(input, init, accessKey, secretKey) {
   if (query.get("response_type") !== "binary") {
     throw new Error("The stdio test mock rejected the request query.");
   }
+  // HTML can only travel in a POST body.
+  if (query.has("html") || !isTarget(query.get("url"))) {
+    throw new Error("The stdio test mock expected a URL in the query.");
+  }
   if (
     secretKey === undefined ||
     query.get("signature") !==
@@ -142,8 +146,21 @@ function validateUnsignedPostRequest(input, init, headers) {
   if (Object.hasOwn(body, "signature")) {
     throw new Error("The stdio test mock received unexpected request signing.");
   }
+  // The capture target is a page URL or an HTML document, never both.
+  if (
+    Object.hasOwn(body, "url") === Object.hasOwn(body, "html") ||
+    !isTarget(body.url ?? body.html)
+  ) {
+    throw new Error(
+      "The stdio test mock expected exactly one of url and html.",
+    );
+  }
 
   return body.format;
+}
+
+function isTarget(value) {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 // The API's signed text: the decoded query parameters except signature, plus

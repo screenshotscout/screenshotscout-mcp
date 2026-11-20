@@ -43,6 +43,8 @@ export type SafeScreenshotScoutError = {
 
 export type ErrorMappingOptions = {
   readonly sensitiveValues?: readonly (string | null | undefined)[];
+  /** True when the capture sent HTML instead of a URL. */
+  readonly fromHtml?: boolean;
   readonly onUnexpectedError?: (diagnostic: RedactedDiagnostic) => void;
 };
 
@@ -92,10 +94,11 @@ function mapScreenshotScoutErrorInternal(
       1_000,
     );
     const optionErrors = readSafeOptionErrors(error.errors, sensitiveValues);
-    const remediation =
-      code === "signature_required"
-        ? "This API key requires signed requests. Use local stdio or MCPB with the secret key, or use a dedicated key with signed requests disabled. Never send the secret key to a hosted MCP endpoint."
-        : undefined;
+    // Matched on the code as the API sent it, which redaction could alter.
+    const remediation = describeApiErrorRemediation(
+      error.errorCode,
+      options.fromHtml === true,
+    );
 
     return {
       category: "api",
@@ -108,6 +111,16 @@ function mapScreenshotScoutErrorInternal(
   }
 
   if (error instanceof ScreenshotScoutConfigurationError) {
+    // The SDK refuses HTML when the client has a secret key, because it can't sign a POST.
+    if (options.fromHtml === true) {
+      return {
+        category: "configuration",
+        message:
+          "html can't be sent while this server has a secret key, because HTML travels in a POST request, which can't be signed.",
+        remediation:
+          "Remove SCREENSHOTSCOUT_SECRET_KEY and use an access key that doesn't require signed requests.",
+      };
+    }
     return {
       category: "configuration",
       message:
@@ -200,6 +213,25 @@ export function formatScreenshotScoutError(
     content: [{ type: "text", text: lines.join("\n") }],
     isError: true,
   };
+}
+
+function describeApiErrorRemediation(
+  code: string | undefined,
+  fromHtml: boolean,
+): string | undefined {
+  switch (code) {
+    case "signature_required":
+      // HTML only travels in a POST request, which can't be signed, so a secret key can't help.
+      return fromHtml
+        ? "This access key requires signed requests, which HTML can't use. Use an access key that doesn't require signed requests."
+        : "This API key requires signed requests. Use local stdio or MCPB with the secret key, or use a dedicated key with signed requests disabled. Never send the secret key to a hosted MCP endpoint.";
+    case "request_too_large":
+      return fromHtml
+        ? "Make the HTML smaller, for example by linking large images and fonts by absolute https URL instead of embedding them."
+        : "Shorten the selectors.";
+    default:
+      return undefined;
+  }
 }
 
 function readSafeOptionErrors(

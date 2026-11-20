@@ -15,6 +15,7 @@ import type {
 
 import {
   CAPTURE_SCREENSHOT_TOOL_NAME,
+  DEFAULT_MAX_HTTP_REQUEST_BODY_BYTES,
   GET_WEBPAGE_MARKDOWN_TOOL_NAME,
   SCREENSHOTSCOUT_API_KEY_MCP_PATH,
   SCREENSHOTSCOUT_MCP_SERVER_INSTRUCTIONS,
@@ -30,6 +31,8 @@ import { createPngHeader } from "../../fixtures/image-headers.js";
 const protocolVersion = "2025-11-25";
 const directHost = "mcp.example.test";
 const directEndpoint = `https://${directHost}${SCREENSHOTSCOUT_API_KEY_MCP_PATH}`;
+const invoiceHtml =
+  "<!doctype html>\n<html><head><title>Invoice #1042</title></head><body><h1>Invoice #1042</h1></body></html>\n";
 
 type UpstreamCaptureCall = {
   readonly accessKey: string;
@@ -147,6 +150,65 @@ void test(
           assert.equal(Object.hasOwn(call.body, forbiddenField), false);
         }
       }
+    } finally {
+      if (connected) {
+        await client.close().catch(() => undefined);
+      }
+      await loopback.close();
+    }
+  },
+);
+
+void test(
+  "html is sent upstream exactly as given, in a POST body without a URL",
+  { timeout: 15_000 },
+  async () => {
+    const accessKey = createAccessKey("html");
+    const upstreamCalls: UpstreamCaptureCall[] = [];
+    const loopback = await startLoopbackScreenshotScoutHttpServer({
+      clientDependencies: { fetch: createUpstreamFetch(upstreamCalls) },
+    });
+    const transport = new StreamableHTTPClientTransport(loopback.url, {
+      requestInit: {
+        headers: { Authorization: `Bearer ${accessKey}` },
+      },
+    });
+    const client = new Client({
+      name: "screenshotscout-http-html-test",
+      version: "0.0.0",
+    });
+    let connected = false;
+
+    try {
+      await client.connect(transport as unknown as Transport);
+      connected = true;
+      const result = asCallToolResult(
+        await client.callTool({
+          name: CAPTURE_SCREENSHOT_TOOL_NAME,
+          arguments: {
+            html: invoiceHtml,
+            format: "pdf",
+            pdfPaperFormat: "a4",
+          },
+        }),
+      );
+
+      assert.equal(result.isError, undefined);
+      assert.deepEqual(
+        result.content.map((content) => content.type),
+        ["text", "resource_link"],
+      );
+      assert.equal(upstreamCalls.length, 1);
+      const call = upstreamCalls[0];
+      assert.ok(call);
+      assert.equal(call.accessKey, accessKey);
+      assert.equal(call.method, "POST");
+      assert.ok(call.signal instanceof AbortSignal);
+      assert.equal(call.signalWasAbortedAtCall, false);
+      assert.equal(call.body.html, invoiceHtml);
+      assert.equal(Object.hasOwn(call.body, "url"), false);
+      assert.equal(call.body.format, "pdf");
+      assert.equal(call.body.pdf_paper_format, "a4");
     } finally {
       if (connected) {
         await client.close().catch(() => undefined);
@@ -561,6 +623,10 @@ void test("content type, bounded body size, malformed JSON, and protocol errors 
     { rawBody: true },
   );
   assert.equal(tooLarge.status, 413);
+  assert.equal(
+    (await readJsonRpcError(tooLarge)).error.message,
+    "The MCP request body is too large. It can be at most 512 bytes.",
+  );
 
   const declaredTooLarge = await sendDirectMcpRequest(
     handler,
@@ -606,6 +672,125 @@ void test("content type, bounded body size, malformed JSON, and protocol errors 
     { contentType: "application/json; charset=utf-8" },
   );
   assert.equal(validParameterizedContentType.status, 200);
+});
+
+void test("the default 1 MiB request limit leaves room for html", async () => {
+  assert.equal(DEFAULT_MAX_HTTP_REQUEST_BODY_BYTES, 1_024 * 1_024);
+
+  const htmlCalls: string[] = [];
+  const handler = createScreenshotScoutApiKeyHttpHandler({
+    allowedHosts: [directHost],
+    clientDependencies: {
+      clientFactory: () => ({
+        capture: () =>
+          Promise.reject(new Error("URL captures are not expected.")),
+        captureFromHtml(html) {
+          htmlCalls.push(html);
+          return Promise.resolve(
+            createBinaryResponse("https://cdn.example.test/large.png"),
+          );
+        },
+      }),
+    },
+  });
+  // Well over the earlier 64 KiB limit.
+  const largeHtml = `<!doctype html><title>Report</title><p>${"Row. ".repeat(100_000)}</p>`;
+  const accepted = await sendDirectMcpRequest(
+    handler,
+    createToolCallRequest(1, {
+      html: largeHtml,
+      format: "png",
+      resultMode: "url_only",
+    }),
+  );
+  const acceptedMessage = (await accepted.json()) as {
+    readonly result?: { readonly isError?: boolean };
+  };
+
+  assert.equal(accepted.status, 200);
+  assert.equal(acceptedMessage.result?.isError, undefined);
+  assert.equal(htmlCalls.length, 1);
+  assert.equal(htmlCalls[0], largeHtml);
+
+  const oversizedHtml = `<!doctype html><title>Report</title><p>${"x".repeat(1_024 * 1_024)}</p>`;
+  const tooLarge = await sendDirectMcpRequest(
+    handler,
+    JSON.stringify(
+      createToolCallRequest(2, { html: oversizedHtml, format: "png" }),
+    ),
+    { rawBody: true },
+  );
+  assert.equal(tooLarge.status, 413);
+
+  const declaredTooLarge = await sendDirectMcpRequest(
+    handler,
+    createInitializeRequest(3),
+    { contentLength: String(1_024 * 1_024 + 1) },
+  );
+  assert.equal(declaredTooLarge.status, 413);
+  assert.equal(
+    (await readJsonRpcError(declaredTooLarge)).error.message,
+    "The MCP request body is too large. It can be at most 1 MiB.",
+  );
+  assert.equal(htmlCalls.length, 1);
+});
+
+// Many HTTP/1.1 clients send the whole body before reading the response, and see a reset connection
+// instead of the 413 if the server stops reading.
+void test("an oversized upload is read to the end, without being kept, before the 413", async () => {
+  const handler = createScreenshotScoutApiKeyHttpHandler({
+    allowedHosts: [directHost],
+    maxRequestBodyBytes: 512,
+  });
+
+  for (const declared of [true, false]) {
+    let pulled = 0;
+    let ended = false;
+    let cancelled = false;
+    const chunks = [
+      new Uint8Array(400),
+      new Uint8Array(400),
+      new Uint8Array(400),
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks[pulled];
+        if (chunk === undefined) {
+          ended = true;
+          controller.close();
+          return;
+        }
+        pulled += 1;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const headers = new Headers({
+      Host: directHost,
+      Accept: "application/json, text/event-stream",
+      Authorization: `Bearer ${createAccessKey("drain")}`,
+      "Content-Type": "application/json",
+    });
+    if (declared) headers.set("Content-Length", "1200");
+
+    const response = await handler(
+      new Request(directEndpoint, {
+        method: "POST",
+        headers,
+        body: stream,
+        duplex: "half",
+      } as RequestInit),
+    );
+
+    assert.equal(response.status, 413, `declared: ${declared}`);
+    assert.deepEqual(
+      { pulled, ended, cancelled },
+      { pulled: 3, ended: true, cancelled: false },
+      `declared: ${declared}`,
+    );
+  }
 });
 
 void test(
@@ -671,6 +856,24 @@ void test(
       assert.match(text, /Never send the secret key/i);
       assert.equal(text.includes(accessKey), false);
       assert.equal(text.includes(secretMarker), false);
+
+      // A secret key can't help with HTML, which only travels in a POST request.
+      const htmlResult = asCallToolResult(
+        await client.callTool({
+          name: CAPTURE_SCREENSHOT_TOOL_NAME,
+          arguments: { html: invoiceHtml, format: "png" },
+        }),
+      );
+      const htmlText = toolResultText(htmlResult);
+
+      assert.equal(htmlResult.isError, true);
+      assert.match(htmlText, /Error code: signature_required/);
+      assert.match(
+        htmlText,
+        /\nHow to resolve: This access key requires signed requests, which HTML can't use\. Use an access key that doesn't require signed requests\.$/,
+      );
+      assert.doesNotMatch(htmlText, /local stdio or MCPB/i);
+      assert.equal(htmlText.includes(accessKey), false);
     } finally {
       if (connected) {
         await client.close().catch(() => undefined);
@@ -680,10 +883,12 @@ void test(
   },
 );
 
-void test("unexpected HTTP tool failures and diagnostics redact access keys and target URLs", async () => {
+void test("unexpected HTTP tool failures and diagnostics redact access keys, target URLs and html", async () => {
   const accessKey = createAccessKey("redaction");
   const targetUrl =
     "https://private.example.test/report?token=must-not-be-visible";
+  const html =
+    "<!doctype html><html><head><title>Payroll</title></head><body><p>Salary: 98,765</p></body></html>";
   const diagnostics: RedactedDiagnostic[] = [];
   const handler = createScreenshotScoutApiKeyHttpHandler({
     allowedHosts: [directHost],
@@ -696,90 +901,119 @@ void test("unexpected HTTP tool failures and diagnostics redact access keys and 
             ),
           );
         },
+        captureFromHtml(document) {
+          return Promise.reject(
+            new Error(
+              `Unexpected failure for ${document}; Authorization: Bearer ${options.accessKey}`,
+            ),
+          );
+        },
       }),
     },
     onUnexpectedError: (diagnostic) => diagnostics.push(diagnostic),
   });
 
-  const response = await sendDirectMcpRequest(
-    handler,
-    createToolCallRequest(1, {
-      url: targetUrl,
-      format: "png",
-    }),
-    { accessKey },
-  );
-  const responseText = await response.text();
+  const responseTexts: string[] = [];
+  for (const target of [{ url: targetUrl }, { html }]) {
+    const response = await sendDirectMcpRequest(
+      handler,
+      createToolCallRequest(1, { ...target, format: "png" }),
+      { accessKey },
+    );
+    assert.equal(response.status, 200);
+    responseTexts.push(await response.text());
+  }
   const diagnosticText = JSON.stringify(diagnostics);
 
-  assert.equal(response.status, 200);
-  assert.match(responseText, /unexpected Screenshot Scout MCP error/i);
-  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics.length, 2);
   assert.match(diagnosticText, /\[REDACTED/);
-  for (const sensitiveValue of [accessKey, targetUrl]) {
-    assert.equal(responseText.includes(sensitiveValue), false);
+  for (const responseText of responseTexts) {
+    assert.match(responseText, /unexpected Screenshot Scout MCP error/i);
+  }
+  for (const sensitiveValue of [accessKey, targetUrl, html, "Salary"]) {
+    for (const responseText of responseTexts) {
+      assert.equal(responseText.includes(sensitiveValue), false);
+    }
     assert.equal(diagnosticText.includes(sensitiveValue), false);
   }
 });
 
-void test("HTTP request cancellation aborts the in-flight Screenshot Scout capture", async () => {
-  const accessKey = createAccessKey("cancellation");
-  const requestAbortController = new AbortController();
-  let observedSignal: AbortSignal | undefined;
-  let markCaptureStarted: (() => void) | undefined;
-  const captureStarted = new Promise<void>((resolve) => {
-    markCaptureStarted = resolve;
-  });
-  const handler = createScreenshotScoutApiKeyHttpHandler({
-    allowedHosts: [directHost],
-    clientDependencies: {
-      clientFactory: () => ({
-        capture(_targetUrl, _captureOptions, requestOptions) {
-          observedSignal =
-            requestOptions?.signal === null
-              ? undefined
-              : requestOptions?.signal;
-          markCaptureStarted?.();
+void test("HTTP request cancellation aborts the in-flight Screenshot Scout capture", async (context) => {
+  for (const [name, target] of [
+    ["url", { url: "https://target.example.test/slow" }],
+    ["html", { html: invoiceHtml }],
+  ] as const) {
+    await context.test(name, async () => {
+      const accessKey = createAccessKey("cancellation");
+      const requestAbortController = new AbortController();
+      type RequestOptions =
+        { readonly signal?: AbortSignal | null } | null | undefined;
+      let observedRequestOptions: RequestOptions;
+      let observedSignal: AbortSignal | undefined;
+      let markCaptureStarted: (() => void) | undefined;
+      const captureStarted = new Promise<void>((resolve) => {
+        markCaptureStarted = resolve;
+      });
+      const waitForAbort = (
+        requestOptions: RequestOptions,
+      ): Promise<BinaryCaptureResponse> => {
+        observedRequestOptions = requestOptions;
+        observedSignal =
+          requestOptions?.signal === null ? undefined : requestOptions?.signal;
+        markCaptureStarted?.();
 
-          return new Promise<BinaryCaptureResponse>((_resolve, reject) => {
-            const signal = observedSignal;
-            if (signal?.aborted === true) {
-              reject(readAbortReason(signal));
-              return;
-            }
-            signal?.addEventListener(
-              "abort",
-              () => reject(readAbortReason(signal)),
-              {
-                once: true,
-              },
-            );
-          });
+        return new Promise<BinaryCaptureResponse>((_resolve, reject) => {
+          const signal = observedSignal;
+          if (signal?.aborted === true) {
+            reject(readAbortReason(signal));
+            return;
+          }
+          signal?.addEventListener(
+            "abort",
+            () => reject(readAbortReason(signal)),
+            {
+              once: true,
+            },
+          );
+        });
+      };
+      const handler = createScreenshotScoutApiKeyHttpHandler({
+        allowedHosts: [directHost],
+        clientDependencies: {
+          clientFactory: () => ({
+            capture: (_targetUrl, _captureOptions, requestOptions) =>
+              name === "url"
+                ? waitForAbort(requestOptions)
+                : Promise.reject(new Error("Expected an HTML capture.")),
+            captureFromHtml: (_html, _captureOptions, requestOptions) =>
+              name === "html"
+                ? waitForAbort(requestOptions)
+                : Promise.reject(new Error("Expected a URL capture.")),
+          }),
         },
-      }),
-    },
-  });
-  const responsePromise = sendDirectMcpRequest(
-    handler,
-    createToolCallRequest(1, {
-      url: "https://target.example.test/slow",
-      format: "png",
-    }),
-    {
-      accessKey,
-      signal: requestAbortController.signal,
-    },
-  );
+      });
+      const responsePromise = sendDirectMcpRequest(
+        handler,
+        createToolCallRequest(1, { ...target, format: "png" }),
+        {
+          accessKey,
+          signal: requestAbortController.signal,
+        },
+      );
 
-  await captureStarted;
-  requestAbortController.abort();
-  const response = await responsePromise;
-  const responseText = await response.text();
+      await captureStarted;
+      requestAbortController.abort();
+      const response = await responsePromise;
+      const responseText = await response.text();
 
-  assert.equal(response.status, 200);
-  assert.equal(observedSignal?.aborted, true);
-  assert.match(responseText, /capture was cancelled/i);
-  assert.equal(responseText.includes(accessKey), false);
+      assert.equal(response.status, 200);
+      // The tool picks no method, and captureFromHtml takes none.
+      assert.deepEqual(Object.keys(observedRequestOptions ?? {}), ["signal"]);
+      assert.equal(observedSignal?.aborted, true);
+      assert.match(responseText, /capture was cancelled/i);
+      assert.equal(responseText.includes(accessKey), false);
+    });
+  }
 });
 
 void test("concurrent requests use independent stateless transports even when JSON-RPC IDs collide", async () => {
@@ -803,6 +1037,8 @@ void test("concurrent requests use independent stateless transports even when JS
         assert.equal(options.baseUrl, "https://api.screenshotscout.com");
 
         return {
+          captureFromHtml: () =>
+            Promise.reject(new Error("HTML captures are not expected.")),
           async capture(targetUrl) {
             activeCaptures += 1;
             maximumActiveCaptures = Math.max(

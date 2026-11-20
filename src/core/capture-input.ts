@@ -61,11 +61,22 @@ export const targetUrlSchema = z
 
 /**
  * The complete curated MCP input surface. Credentials and SDK-owned
- * `responseType` controls are deliberately absent.
+ * `responseType` controls are deliberately absent. Exactly one of `url` and
+ * `html` is required.
  */
 export const captureScreenshotInputSchema = z
   .object({
-    url: targetUrlSchema.describe("HTTP or HTTPS page URL to capture."),
+    url: targetUrlSchema
+      .optional()
+      .describe(
+        "HTTP or HTTPS page URL to capture. Provide either url or html.",
+      ),
+    // Kept exactly as sent: the refinement checks the trimmed value only.
+    html: nonBlankStringSchema
+      .optional()
+      .describe(
+        "A complete HTML document to render instead of a URL, such as HTML you wrote. Start with <!doctype html> and include a <title>. Inline the CSS, or use absolute https URLs for images, stylesheets and fonts. Scripts run, but localStorage, sessionStorage and cookies aren't available.",
+      ),
     format: z
       .enum(CAPTURE_FORMATS)
       .default("jpeg")
@@ -226,6 +237,19 @@ export const captureScreenshotInputSchema = z
   })
   .strict()
   .superRefine((input, context) => {
+    if (input.url === undefined && input.html === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["url"],
+        message: "Provide either url or html.",
+      });
+    } else if (input.url !== undefined && input.html !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["html"],
+        message: "Provide either url or html, not both.",
+      });
+    }
     if (
       input.imageWidth !== undefined &&
       input.imageHeight !== undefined &&
@@ -245,8 +269,11 @@ export type CaptureScreenshotInput = z.infer<
 >;
 export type CaptureResultMode = CaptureScreenshotInput["resultMode"];
 
-export type MappedCaptureRequest = {
-  readonly targetUrl: string;
+/** What to capture: a page's URL, or an HTML document. */
+export type MappedCaptureRequest = (
+  | { readonly targetUrl: string; readonly html?: never }
+  | { readonly html: string; readonly targetUrl?: never }
+) & {
   readonly resultMode: CaptureResultMode;
   readonly captureOptions: Readonly<BinaryCaptureOptions>;
 };
@@ -259,12 +286,13 @@ export function parseCaptureScreenshotInput(
 
 /**
  * Applies MCP-owned image defaults, then maps the curated fields to the
- * identically named SDK fields. The SDK remains solely responsible for request
- * serialization.
+ * identically named SDK fields. The result carries either the target URL or
+ * the HTML. The SDK remains solely responsible for request serialization.
  */
 export function mapCaptureInputToSdk(
   input: CaptureScreenshotInput,
 ): MappedCaptureRequest {
+  const target = resolveCaptureTarget(input);
   const hideSelectors =
     input.hideSelectors === undefined
       ? undefined
@@ -353,8 +381,26 @@ export function mapCaptureInputToSdk(
   };
 
   return Object.freeze({
-    targetUrl: input.url,
+    ...target,
     resultMode: input.resultMode,
     captureOptions: Object.freeze(captureOptions),
   });
+}
+
+// The schema already requires exactly one of the two. This also covers input
+// that a caller built without parsing it.
+function resolveCaptureTarget(
+  input: CaptureScreenshotInput,
+): { readonly targetUrl: string } | { readonly html: string } {
+  if (input.url !== undefined && input.html === undefined) {
+    return { targetUrl: input.url };
+  }
+  if (input.html !== undefined && input.url === undefined) {
+    return { html: input.html };
+  }
+  throw new TypeError(
+    input.url === undefined
+      ? "Provide either url or html."
+      : "Provide either url or html, not both.",
+  );
 }

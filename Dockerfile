@@ -18,7 +18,7 @@ RUN npm run build
 
 FROM alpine:3.24.1 AS runtime
 LABEL org.opencontainers.image.title="Screenshot Scout MCP Server" \
-      org.opencontainers.image.description="Capture webpages as images or PDFs, or get them as Markdown, with Screenshot Scout." \
+      org.opencontainers.image.description="Capture webpages or HTML as images or PDFs, or get webpages as Markdown, with Screenshot Scout." \
       org.opencontainers.image.url="https://screenshotscout.com/mcp" \
       org.opencontainers.image.documentation="https://screenshotscout.com/docs/mcp" \
       org.opencontainers.image.source="https://github.com/screenshotscout/screenshotscout-mcp" \
