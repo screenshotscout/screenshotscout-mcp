@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "screenshotscout-mcp",
   "display_name": "Screenshot Scout",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Capture webpages or HTML as images or PDFs, or get webpages as Markdown, with the Screenshot Scout API.",
   "long_description": "Capture an HTTP or HTTPS webpage, or HTML you provide, as PNG, JPEG, WebP, GIF, TIFF, or PDF, or get a webpage's content as Markdown. Choose full-page, viewport, device, location, element, wait, blocking, cache, image, and PDF options from Claude Desktop.",
   "author": {
